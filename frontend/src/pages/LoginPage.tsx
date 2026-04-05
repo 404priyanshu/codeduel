@@ -1,51 +1,57 @@
 import { useState } from "react";
 import { signIn, signUp, confirmSignUp } from "aws-amplify/auth";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
+import { useAuth } from "../lib/useAuth";
 
 type Mode = "login" | "signup" | "confirm";
 
 export default function LoginPage() {
+    const { user, loading: authLoading } = useAuth();
     const [mode, setMode] = useState<Mode>("login");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [code, setCode] = useState("");
     const [error, setError] = useState("");
-    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const navigate = useNavigate();
 
+    // Early returns AFTER all hooks
+    if (authLoading) return null;
+    if (user) return <Navigate to="/dashboard" replace />;
+
     const handleLogin = async () => {
-        setLoading(true); setError("");
+        setSubmitting(true); setError("");
         try {
             await signIn({ username: email, password });
             navigate("/dashboard");
         } catch (e: any) {
             setError(e.message);
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
     };
 
     const handleSignup = async () => {
-        setLoading(true); setError("");
+        setSubmitting(true); setError("");
         try {
             await signUp({ username: email, password });
             setMode("confirm");
         } catch (e: any) {
             setError(e.message);
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
     };
 
     const handleConfirm = async () => {
-        setLoading(true); setError("");
+        setSubmitting(true); setError("");
         try {
             await confirmSignUp({ username: email, confirmationCode: code });
             setMode("login");
         } catch (e: any) {
             setError(e.message);
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
     };
 
@@ -112,20 +118,22 @@ export default function LoginPage() {
                             mode === "signup" ? handleSignup :
                                 handleConfirm
                     }
-                    disabled={loading}
+                    disabled={submitting}
                     className="w-full bg-green-500 text-black font-mono 
                      font-bold text-sm py-2 hover:bg-green-400 
                      disabled:opacity-50 transition-colors"
                 >
-                    {loading ? "..." :
+                    {submitting ? "..." :
                         mode === "login" ? "SIGN IN →" :
                             mode === "signup" ? "CREATE ACCOUNT →" :
                                 "VERIFY →"}
                 </button>
 
-                <p className="text-gray-600 font-mono text-xs mt-4 
-                      text-center cursor-pointer hover:text-gray-400"
-                    onClick={() => setMode(mode === "login" ? "signup" : "login")}>
+                <p
+                    className="text-gray-600 font-mono text-xs mt-4 
+                     text-center cursor-pointer hover:text-gray-400"
+                    onClick={() => setMode(mode === "login" ? "signup" : "login")}
+                >
                     {mode === "login"
                         ? "No account? Sign up"
                         : "Have an account? Sign in"}
