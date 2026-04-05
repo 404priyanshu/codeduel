@@ -5,7 +5,7 @@ export default function SessionPage() {
     const [code, setCode] = useState("// Start coding here\n");
 
     return (
-        <div className="h-screen w-screen bg-gray-950 flex flex-col">
+        <div className="h-screen w-full bg-gray-950 flex flex-col">
             <div
                 className="h-12 bg-gray-900 border-b border-gray-800
                       flex items-center px-4"
