@@ -5,6 +5,7 @@ import { useAuth } from "../lib/useAuth";
 import Spline from '@splinetool/react-spline';
 import { motion } from 'framer-motion';
 import { LogOut, MonitorPlay, Users, Code2, Copy, Play } from 'lucide-react';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 function generateSessionId() {
     return Math.random().toString(36).substring(2, 10).toUpperCase();
@@ -48,7 +49,9 @@ export default function DashboardPage() {
             
             {/* SPLINE 3D BACKGROUND */}
             <div className="absolute inset-0 z-0 opacity-80">
-                <Spline scene="https://prod.spline.design/kZCWcwB61OSaXwYy/scene.splinecode" />
+                <ErrorBoundary fallback={<div className="absolute inset-0 bg-gray-950"></div>}>
+                    <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
+                </ErrorBoundary>
             </div>
             
             {/* Dark overlay for readability */}

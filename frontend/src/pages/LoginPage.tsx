@@ -5,6 +5,7 @@ import { useAuth } from "../lib/useAuth";
 import Spline from '@splinetool/react-spline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Code2, ArrowRight, Loader2, Mail, Lock, CheckCircle2 } from 'lucide-react';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 type Mode = "login" | "signup" | "confirm";
 
@@ -70,7 +71,9 @@ export default function LoginPage() {
         <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-gray-950">
             {/* SPLINE 3D BACKGROUND */}
             <div className="absolute inset-0 z-0">
-                <Spline scene="https://prod.spline.design/kZCWcwB61OSaXwYy/scene.splinecode" />
+                <ErrorBoundary fallback={<div className="absolute inset-0 bg-gray-950"></div>}>
+                    <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
+                </ErrorBoundary>
             </div>
             
             {/* Dark overlay to ensure text readability */}
