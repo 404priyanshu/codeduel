@@ -1,4 +1,4 @@
-<![CDATA[<div align="center">
+<div align="center">
 
 # ⚔️ CodeDuel
 
@@ -237,4 +237,3 @@ This project is licensed under the [MIT License](LICENSE).
 **Built with ☕ and ambition.**
 
 </div>
-]]>
