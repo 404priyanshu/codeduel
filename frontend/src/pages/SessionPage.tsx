@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Editor from "../components/Editor";
 import { useSession } from "../lib/useSession";
@@ -18,32 +18,23 @@ export default function SessionPage() {
     const [language, setLanguage] = useState("javascript");
     const { connected, remoteCode, sendCode } = useSession(id!);
 
-    // Track if current change came from remote
-    // so we don't echo it back over WebSocket
-    const isRemoteChange = useRef(false);
-
+    // When remote code arrives, update state so the Editor sees the new value
     useEffect(() => {
         if (remoteCode !== null) {
-            isRemoteChange.current = true;
             setCode(remoteCode);
         }
     }, [remoteCode]);
 
-    const handleChange = (value: string | undefined) => {
+    // handleChange is ONLY called for local keystrokes
+    // (the Editor skips calling onChange during remote updates)
+    const handleChange = useCallback((value: string | undefined) => {
         const newCode = value ?? "";
         setCode(newCode);
-
-        // Only send if this was a local keystroke, not a remote update
-        if (isRemoteChange.current) {
-            isRemoteChange.current = false;
-            return;
-        }
-
         sendCode(newCode);
-    };
+    }, [sendCode]);
 
     return (
-        <div className="h-screen w-full bg-gray-950 flex flex-col overflow-hidden">
+        <div className="h-screen w-screen bg-gray-950 flex flex-col">
 
             {/* Header */}
             <div className="h-12 bg-gray-900 border-b border-gray-800

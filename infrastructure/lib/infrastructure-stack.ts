@@ -70,6 +70,7 @@ export class InfrastructureStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       environment,
       bundling: { forceDockerBundling: false },
+      timeout: cdk.Duration.seconds(29),
     });
 
     // Grant DynamoDB access
