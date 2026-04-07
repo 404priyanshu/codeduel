@@ -72,7 +72,7 @@ export default function DashboardPage() {
                     <div className="hidden md:flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)] animate-pulse"></div>
                         <span className="text-gray-400 font-mono text-xs">
-                            {user?.signInDetails?.loginId}
+                            {user?.signInDetails?.loginId ?? user?.username}
                         </span>
                     </div>
                     

@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { signIn, signUp, confirmSignUp } from "aws-amplify/auth";
+import { signIn, signUp, confirmSignUp, signInWithRedirect } from "aws-amplify/auth";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../lib/useAuth";
+import { googleAuthEnabled } from "../lib/auth";
 import Spline from '@splinetool/react-spline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Code2, ArrowRight, Loader2, Mail, Lock, CheckCircle2 } from 'lucide-react';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
 type Mode = "login" | "signup" | "confirm";
+type AuthError = {
+    message?: string;
+};
 
 export default function LoginPage() {
     const { user, loading: authLoading } = useAuth();
@@ -28,8 +32,8 @@ export default function LoginPage() {
         try {
             await signIn({ username: email, password });
             navigate("/dashboard");
-        } catch (e: any) {
-            setError(e.message);
+        } catch (e) {
+            setError((e as AuthError).message ?? "Unable to sign in.");
         } finally {
             setSubmitting(false);
         }
@@ -41,8 +45,8 @@ export default function LoginPage() {
         try {
             await signUp({ username: email, password });
             setMode("confirm");
-        } catch (e: any) {
-            setError(e.message);
+        } catch (e) {
+            setError((e as AuthError).message ?? "Unable to create your account.");
         } finally {
             setSubmitting(false);
         }
@@ -54,9 +58,20 @@ export default function LoginPage() {
         try {
             await confirmSignUp({ username: email, confirmationCode: code });
             setMode("login");
-        } catch (e: any) {
-            setError(e.message);
+        } catch (e) {
+            setError((e as AuthError).message ?? "Unable to verify your account.");
         } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleGoogleSignIn = async () => {
+        setSubmitting(true);
+        setError("");
+        try {
+            await signInWithRedirect({ provider: "Google" });
+        } catch (e) {
+            setError((e as AuthError).message ?? "Unable to start Google sign-in.");
             setSubmitting(false);
         }
     };
@@ -169,6 +184,30 @@ export default function LoginPage() {
                                     required
                                 />
                             </div>
+                        )}
+
+                        {mode !== "confirm" && googleAuthEnabled && (
+                            <>
+                                <button
+                                    type="button"
+                                    disabled={submitting}
+                                    onClick={handleGoogleSignIn}
+                                    className="w-full border border-white/15 bg-white/5 hover:bg-white/10 text-white font-mono font-bold text-sm py-3 px-4 rounded-xl disabled:opacity-50 transition-all flex items-center justify-center gap-3"
+                                >
+                                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="#EA4335" d="M12 10.2v3.9h5.4c-.2 1.2-.9 2.2-1.8 2.9l3 2.3c1.7-1.6 2.7-3.9 2.7-6.7 0-.6-.1-1.2-.2-1.8H12Z" />
+                                        <path fill="#34A853" d="M12 21c2.4 0 4.4-.8 5.9-2.1l-3-2.3c-.8.6-1.8 1-2.9 1-2.2 0-4.1-1.5-4.8-3.5l-3.1 2.4C5.6 19.3 8.6 21 12 21Z" />
+                                        <path fill="#4A90E2" d="M7.2 14.1c-.2-.6-.3-1.3-.3-2.1s.1-1.4.3-2.1l-3.1-2.4C3.4 8.9 3 10.4 3 12s.4 3.1 1.1 4.5l3.1-2.4Z" />
+                                        <path fill="#FBBC05" d="M12 6.4c1.3 0 2.5.5 3.4 1.3l2.5-2.5C16.3 3.7 14.3 3 12 3 8.6 3 5.6 4.7 4.1 7.5l3.1 2.4c.7-2 2.6-3.5 4.8-3.5Z" />
+                                    </svg>
+                                    {mode === "signup" ? "SIGN UP WITH GOOGLE" : "CONTINUE WITH GOOGLE"}
+                                </button>
+                                <div className="flex items-center gap-3 text-gray-500 font-mono text-[10px] tracking-[0.25em] uppercase">
+                                    <div className="h-px flex-1 bg-white/10" />
+                                    <span>or</span>
+                                    <div className="h-px flex-1 bg-white/10" />
+                                </div>
+                            </>
                         )}
 
                         <button

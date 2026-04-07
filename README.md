@@ -180,6 +180,16 @@ npm run dev
 
 The app will be available at `http://localhost:5173`.
 
+Optional auth overrides for local/dev can be placed in `frontend/.env.local`:
+
+```bash
+VITE_USER_POOL_ID=your-user-pool-id
+VITE_USER_POOL_CLIENT_ID=your-user-pool-client-id
+VITE_COGNITO_DOMAIN=your-domain.auth.us-east-1.amazoncognito.com
+VITE_AUTH_REDIRECT_SIGN_IN=http://localhost:5173/login
+VITE_AUTH_REDIRECT_SIGN_OUT=http://localhost:5173/
+```
+
 ### Collaboration WebSocket Server (Phase 1)
 
 ```bash
@@ -204,6 +214,26 @@ npx cdk synth
 
 # Deploy to AWS (requires configured credentials)
 npx cdk deploy
+```
+
+To provision Google sign-in with Cognito in the CDK stack, export these before `cdk deploy`:
+
+```bash
+export GOOGLE_CLIENT_ID=your-google-oauth-client-id
+export GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+export COGNITO_DOMAIN_PREFIX=your-unique-cognito-domain-prefix
+export AUTH_CALLBACK_URLS=http://localhost:5173/login
+export AUTH_LOGOUT_URLS=http://localhost:5173/
+```
+
+Then add your Cognito hosted domain to the Google OAuth client:
+
+```text
+Authorized JavaScript origins:
+https://<your-cognito-domain>
+
+Authorized redirect URIs:
+https://<your-cognito-domain>/oauth2/idpresponse
 ```
 
 ---
