@@ -69,3 +69,4 @@ coverage/
 *.tgz
 .cache/
 .parcel-cache/
+collab-server/data/

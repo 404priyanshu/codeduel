@@ -1,88 +1,176 @@
 import MonacoEditor, { type OnMount } from "@monaco-editor/react";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import type * as monacoType from "monaco-editor";
+import * as Y from "yjs";
+import { WebsocketProvider } from "y-websocket";
+import { MonacoBinding } from "y-monaco";
 
 interface Props {
+    sessionId: string;
     language?: string;
-    value?: string;
-    onChange?: (value: string | undefined) => void;
+    onConnectionChange?: (connected: boolean) => void;
+    onLanguageChange?: (language: string) => void;
 }
 
 export default function Editor({
+    sessionId,
     language = "javascript",
-    value = "// Start coding here\n",
-    onChange,
+    onConnectionChange,
+    onLanguageChange,
 }: Props) {
     const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(null);
-    const isApplyingRemote = useRef(false);
+    const monacoRef = useRef<typeof monacoType | null>(null);
+    const docRef = useRef<Y.Doc | null>(null);
+    const providerRef = useRef<WebsocketProvider | null>(null);
+    const bindingRef = useRef<MonacoBinding | null>(null);
+    const sessionStateRef = useRef<Y.Map<string> | null>(null);
+    const editorDisposables = useRef<monacoType.IDisposable[]>([]);
+    const syncedRef = useRef(false);
+    const languageRef = useRef(language);
+    const onLanguageChangeRef = useRef(onLanguageChange);
+    const [isEditorReady, setIsEditorReady] = useState(false);
 
-    // Track the last value we reported via onChange so the useEffect
-    // can distinguish "value changed because of local typing" (skip)
-    // from "value changed because of a remote update" (apply).
-    const lastLocalValue = useRef<string | null>(null);
+    useEffect(() => {
+        languageRef.current = language;
+        onLanguageChangeRef.current = onLanguageChange;
+    }, [language, onLanguageChange]);
 
-    const handleMount: OnMount = (editor) => {
+    const handleMount: OnMount = (editor, monaco) => {
         editorRef.current = editor;
-
-        // Listen for content changes from user typing
-        editor.onDidChangeModelContent(() => {
-            if (isApplyingRemote.current) return;      // skip echo
-            const v = editor.getValue();
-            lastLocalValue.current = v;                // remember it
-            onChange?.(v);
-        });
+        monacoRef.current = monaco;
+        setIsEditorReady(true);
     };
 
-    // Only apply the value prop when it differs from both
-    // the current model AND what we last sent via onChange.
-    // This prevents the race where React state lags behind
-    // Monaco's model during fast typing.
     useEffect(() => {
+        if (!isEditorReady) return;
+
         const editor = editorRef.current;
+        const wsUrl = import.meta.env.VITE_COLLAB_WS_URL || "ws://localhost:1234";
         if (!editor) return;
-
-        // If this value came from local typing, skip it —
-        // Monaco already has it in the model.
-        if (value === lastLocalValue.current) return;
-
         const model = editor.getModel();
         if (!model) return;
 
-        const currentValue = model.getValue();
-        if (value === currentValue) return;  // already in sync
+        const doc = new Y.Doc();
+        const yText = doc.getText("monaco");
+        const sessionState = doc.getMap<string>("session");
+        const provider = new WebsocketProvider(wsUrl, sessionId, doc, {
+            maxBackoffTime: 1500,
+            resyncInterval: 5000,
+        });
+        const binding = new MonacoBinding(yText, model, new Set([editor]));
 
-        // This is a genuine remote update — apply it.
-        const selections = editor.getSelections();
+        let socketConnected = false;
+        let docSynced = false;
+        const emitConnectionState = () => {
+            onConnectionChange?.(socketConnected && docSynced);
+        };
 
-        isApplyingRemote.current = true;
+        const statusListener = ({
+            status,
+        }: {
+            status: "connected" | "disconnected" | "connecting";
+        }) => {
+            socketConnected = status === "connected";
+            if (status !== "connected") {
+                docSynced = false;
+            }
+            emitConnectionState();
+        };
+        const syncListener = (synced: boolean) => {
+            docSynced = synced;
+            syncedRef.current = synced;
+            if (synced) {
+                const sharedLanguage = sessionState.get("language");
+                if (typeof sharedLanguage === "string" && sharedLanguage.length > 0) {
+                    if (sharedLanguage !== languageRef.current) {
+                        onLanguageChangeRef.current?.(sharedLanguage);
+                    }
+                } else {
+                    sessionState.set("language", languageRef.current);
+                }
+            }
+            emitConnectionState();
+        };
+        const disconnectListener = () => {
+            socketConnected = false;
+            docSynced = false;
+            syncedRef.current = false;
+            emitConnectionState();
+        };
+        const sessionStateListener = () => {
+            const sharedLanguage = sessionState.get("language");
+            if (
+                typeof sharedLanguage === "string" &&
+                sharedLanguage.length > 0 &&
+                sharedLanguage !== languageRef.current
+            ) {
+                onLanguageChangeRef.current?.(sharedLanguage);
+            }
+        };
 
-        // pushEditOperations preserves the undo stack
-        model.pushEditOperations(
-            selections,
-            [
-                {
-                    range: model.getFullModelRange(),
-                    text: value ?? "",
-                },
-            ],
-            () => selections
-        );
+        provider.on("status", statusListener);
+        provider.on("sync", syncListener);
+        provider.on("connection-error", disconnectListener);
+        provider.on("connection-close", disconnectListener);
+        sessionState.observe(sessionStateListener);
 
-        if (selections) {
-            editor.setSelections(selections);
-        }
+        docRef.current = doc;
+        providerRef.current = provider;
+        bindingRef.current = binding;
+        sessionStateRef.current = sessionState;
+        editorDisposables.current.push({
+            dispose: () => provider.off("status", statusListener),
+        });
+        editorDisposables.current.push({
+            dispose: () => provider.off("sync", syncListener),
+        });
+        editorDisposables.current.push({
+            dispose: () => provider.off("connection-error", disconnectListener),
+        });
+        editorDisposables.current.push({
+            dispose: () => provider.off("connection-close", disconnectListener),
+        });
+        editorDisposables.current.push({
+            dispose: () => sessionState.unobserve(sessionStateListener),
+        });
 
-        isApplyingRemote.current = false;
-    }, [value]);
+        return () => {
+            editorDisposables.current.forEach((d) => d.dispose());
+            editorDisposables.current = [];
+            bindingRef.current?.destroy();
+            providerRef.current?.destroy();
+            docRef.current?.destroy();
+            bindingRef.current = null;
+            providerRef.current = null;
+            docRef.current = null;
+            sessionStateRef.current = null;
+            onConnectionChange?.(false);
+        };
+    }, [isEditorReady, sessionId, onConnectionChange]);
+
+    useEffect(() => {
+        const editor = editorRef.current;
+        const monaco = monacoRef.current;
+        const model = editor?.getModel();
+        if (!editor || !monaco || !model) return;
+        monaco.editor.setModelLanguage(model, language);
+    }, [language]);
+
+    useEffect(() => {
+        const sessionState = sessionStateRef.current;
+        if (!sessionState || !syncedRef.current) return;
+        if (sessionState.get("language") === language) return;
+        sessionState.set("language", language);
+    }, [language]);
 
     return (
         <MonacoEditor
             height="100%"
             theme="vs-dark"
             language={language}
-            defaultValue={value}
             onMount={handleMount}
             options={{
+                automaticLayout: true,
                 fontSize: 14,
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,

@@ -50,6 +50,9 @@ CodeDuel is a real-time collaborative technical interview platform where intervi
 
 ## 🏗 Architecture
 
+> Current editor sync runs through the dedicated Yjs websocket service in `collab-server/`.
+> The AWS WebSocket handlers in `infrastructure/` are still present in the repo, but they are not the active collaborative editor transport.
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                      Frontend                           │
@@ -168,11 +171,26 @@ codeduel/
 cd frontend
 npm install
 
+# Point frontend to collab websocket server
+echo "VITE_COLLAB_WS_URL=ws://localhost:1234" > .env.local
+
 # Start dev server
 npm run dev
 ```
 
 The app will be available at `http://localhost:5173`.
+
+### Collaboration WebSocket Server (Phase 1)
+
+```bash
+cd collab-server
+npm install
+npm start
+```
+
+The server runs on `ws://localhost:1234` by default and now persists room snapshots to `collab-server/data/`.
+For an ephemeral in-memory server, run `npm run start:memory`.
+Health and readiness checks are exposed at `http://localhost:1234/healthz` and `http://localhost:1234/readyz`.
 
 ### Infrastructure
 

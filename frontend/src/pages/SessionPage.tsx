@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Editor from "../components/Editor";
-import { useSession } from "../lib/useSession";
 
 const LANGUAGES = [
     { label: "JavaScript", value: "javascript" },
@@ -14,24 +13,21 @@ const LANGUAGES = [
 export default function SessionPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const [code, setCode] = useState("// Start coding here\n");
     const [language, setLanguage] = useState("javascript");
-    const { connected, remoteCode, sendCode } = useSession(id!);
+    const [connected, setConnected] = useState(false);
 
-    // When remote code arrives, update state so the Editor sees the new value
     useEffect(() => {
-        if (remoteCode !== null && remoteCode !== code) {
-            setCode(remoteCode);
-        }
-    }, [remoteCode, code]);
+        if (!id) navigate("/dashboard");
+    }, [id, navigate]);
 
-    // handleChange is ONLY called for local keystrokes
-    // (the Editor skips calling onChange during remote updates)
-    const handleChange = useCallback((value: string | undefined) => {
-        const newCode = value ?? "";
-        setCode(newCode);
-        sendCode(newCode);
-    }, [sendCode]);
+    const handleConnectionChange = useCallback((isConnected: boolean) => {
+        setConnected(isConnected);
+    }, []);
+    const handleLanguageChange = useCallback((nextLanguage: string) => {
+        setLanguage((currentLanguage) =>
+            currentLanguage === nextLanguage ? currentLanguage : nextLanguage
+        );
+    }, []);
 
     return (
         <div className="h-screen w-screen bg-gray-950 flex flex-col">
@@ -55,7 +51,7 @@ export default function SessionPage() {
                 <div className="flex items-center gap-4">
                     <select
                         value={language}
-                        onChange={(e) => setLanguage(e.target.value)}
+                        onChange={(e) => handleLanguageChange(e.target.value)}
                         className="bg-gray-800 text-gray-300 font-mono text-xs
                        border border-gray-700 px-2 py-1 outline-none
                        focus:border-green-500 cursor-pointer"
@@ -80,9 +76,10 @@ export default function SessionPage() {
             {/* Editor */}
             <div className="flex-1">
                 <Editor
-                    value={code}
+                    sessionId={id!}
                     language={language}
-                    onChange={handleChange}
+                    onConnectionChange={handleConnectionChange}
+                    onLanguageChange={handleLanguageChange}
                 />
             </div>
 
