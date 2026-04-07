@@ -1,196 +1,32 @@
-<div align="center">
+# CodeDuel
 
-# ⚔️ CodeDuel
+CodeDuel is a room-based collaborative coding app for technical interviews and pair-programming. It gives authenticated users a shared Monaco editor, fast real-time sync, and simple session links so two people can work in the same editor at the same time.
 
-**Real-time collaborative technical interview platform.**
+## What works today
 
-Replace CoderPad. Live code editor · sandboxed execution · video chat — all in the browser.
+- Email sign up and sign in with Amazon Cognito
+- Optional Google sign-in through Cognito Hosted UI
+- Protected dashboard for creating or joining interview rooms
+- Shared Monaco editor powered by Yjs CRDT sync
+- Synchronized language selection across connected editors
+- Dedicated collaboration server with reconnect handling, persistence, and health checks
 
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![AWS CDK](https://img.shields.io/badge/AWS_CDK-2.x-FF9900?logo=amazonaws&logoColor=white)](https://aws.amazon.com/cdk/)
-[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vite.dev)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+## Repository layout
 
-</div>
-
----
-
-## 📋 Table of Contents
-
-- [What is CodeDuel?](#-what-is-codeduel)
-- [Architecture](#-architecture)
-- [Tech Stack](#-tech-stack)
-- [Project Structure](#-project-structure)
-- [Getting Started](#-getting-started)
-- [Roadmap](#-roadmap)
-- [Revenue Model](#-revenue-model)
-- [Contributing](#-contributing)
-- [License](#-license)
-
----
-
-## 🧠 What is CodeDuel?
-
-CodeDuel is a real-time collaborative technical interview platform where interviewers and candidates share a **live Monaco editor** (VS Code's engine), run code in a **sandboxed environment**, and **video chat** — all in the browser.
-
-**Target market:** Bootcamps, small agencies, and university career centers that can't afford enterprise-grade solutions like CoderPad.
-
-### Key Features
-
-| Feature | Description |
-|---|---|
-| 🖥️ **Live Collaborative Editor** | Monaco Editor with Yjs CRDT — Google Docs-style real-time sync with automatic conflict resolution |
-| ⚡ **Sandboxed Code Execution** | Run JS, Python, Ruby via Lambda (<500ms cold start) and Java, Go, Rust via ECS Fargate — fully isolated, no network access, 256MB RAM cap, 10s timeout |
-| 📹 **In-Browser Video Chat** | WebRTC-powered video via Twilio (dev) / Amazon Chime SDK (production) |
-| 🔐 **Auth & Sessions** | AWS Cognito — JWTs, social login, zero custom auth code |
-| 📊 **Interview Dashboard** | Create sessions, manage problem banks, review past interviews |
-
----
-
-## 🏗 Architecture
-
-> Current editor sync runs through the dedicated Yjs websocket service in `collab-server/`.
-> The AWS WebSocket handlers in `infrastructure/` are still present in the repo, but they are not the active collaborative editor transport.
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Frontend                           │
-│  React 19 · Monaco Editor · Yjs · Tailwind CSS · Vite  │
-└──────────────┬──────────────────────┬───────────────────┘
-               │ REST / WS            │ WebRTC
-               ▼                      ▼
-┌──────────────────────────┐  ┌──────────────────────┐
-│    API Gateway           │  │  Twilio / Chime SDK  │
-│  REST API + WebSocket    │  │  (Video & Audio)     │
-└──────────┬───────────────┘  └──────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────────┐
-│                  AWS Lambda                          │
-│  Session management · WebSocket handlers · Auth      │
-└──────┬────────────────────┬──────────────────────────┘
-       │                    │
-       ▼                    ▼
-┌──────────────┐  ┌────────────────────────────────────┐
-│  DynamoDB    │  │  Code Execution Sandbox            │
-│  (Sessions,  │  │  Lambda  → JS, Python, Ruby        │
-│   Problems,  │  │  Fargate → Java, Go, Rust          │
-│   Users)     │  │  No network · 256MB · 10s timeout  │
-└──────────────┘  └────────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────────┐
-│  Redis (ElastiCache)  ·  S3          │
-│  Cursor positions,      Replay       │
-│  connection IDs,        files        │
-│  real-time buffers                   │
-└──────────────────────────────────────┘
-```
-
----
-
-## 🛠 Tech Stack
-
-### Frontend
-| Technology | Purpose |
-|---|---|
-| [React 19](https://react.dev) | UI framework |
-| [TypeScript 5.9](https://www.typescriptlang.org) | Type safety |
-| [Vite 8](https://vite.dev) | Build tooling & dev server |
-| [Monaco Editor](https://microsoft.github.io/monaco-editor/) | Code editor (VS Code engine) |
-| [Yjs](https://yjs.dev) | CRDT for real-time collaborative editing |
-| [y-websocket](https://github.com/yjs/y-websocket) | WebSocket transport for Yjs |
-| [Tailwind CSS 4](https://tailwindcss.com) | Utility-first CSS |
-| [Zustand](https://zustand.docs.pmnd.rs) | Lightweight state management |
-| [React Router 7](https://reactrouter.com) | Client-side routing |
-| [TanStack Query](https://tanstack.com/query) | Async state & data fetching |
-| [Axios](https://axios-http.com) | HTTP client |
-
-### Infrastructure
-| Technology | Purpose |
-|---|---|
-| [AWS CDK 2](https://aws.amazon.com/cdk/) | Infrastructure as Code |
-| [AWS Lambda](https://aws.amazon.com/lambda/) | Serverless compute (API + code execution) |
-| [API Gateway](https://aws.amazon.com/api-gateway/) | REST & WebSocket APIs |
-| [DynamoDB](https://aws.amazon.com/dynamodb/) | Single-table NoSQL database |
-| [ElastiCache (Redis)](https://aws.amazon.com/elasticache/) | Real-time ephemeral state |
-| [ECS Fargate](https://aws.amazon.com/fargate/) | Container-based code runner (heavy runtimes) |
-| [S3](https://aws.amazon.com/s3/) | Session replay storage |
-| [Cognito](https://aws.amazon.com/cognito/) | Authentication & user management |
-| [Twilio](https://www.twilio.com/video) / [Chime SDK](https://aws.amazon.com/chime/chime-sdk/) | WebRTC video |
-
----
-
-## 📁 Project Structure
-
-```
+```text
 codeduel/
-├── frontend/                   # React SPA
-│   ├── src/
-│   │   ├── components/
-│   │   │   └── Editor.tsx      # Monaco editor wrapper
-│   │   ├── pages/
-│   │   │   ├── LoginPage.tsx   # Authentication page
-│   │   │   ├── DashboardPage.tsx # Session management
-│   │   │   └── SessionPage.tsx # Live interview session
-│   │   ├── App.tsx             # Router & app shell
-│   │   ├── main.tsx            # Entry point
-│   │   ├── index.css           # Global styles
-│   │   └── App.css             # App-level styles
-│   ├── vite.config.ts
-│   ├── tsconfig.json
-│   └── package.json
-│
-├── infrastructure/             # AWS CDK IaC
-│   ├── bin/                    # CDK app entry point
-│   ├── lib/
-│   │   └── infrastructure-stack.ts  # Main stack definition
-│   ├── test/                   # Stack tests
-│   ├── cdk.json
-│   └── package.json
-│
-└── README.md
+├── frontend/        React + Vite application
+├── collab-server/   Dedicated Yjs websocket server used by the live editor
+├── infrastructure/  AWS CDK stack for Cognito and supporting backend resources
+└── docs/            Project documentation and technical report
 ```
 
----
+The active real-time editor path is `frontend/` + `collab-server/`.
+The AWS WebSocket handlers inside `infrastructure/` are still in the repo, but they are not the current live editor transport.
 
-## 🚀 Getting Started
+## Quick start
 
-### Prerequisites
-
-- **Node.js** ≥ 20
-- **npm** ≥ 10
-- **AWS CLI** configured (for infrastructure)
-- **AWS CDK CLI** (`npm i -g aws-cdk`)
-
-### Frontend
-
-```bash
-# Install dependencies
-cd frontend
-npm install
-
-# Point frontend to collab websocket server
-echo "VITE_COLLAB_WS_URL=ws://localhost:1234" > .env.local
-
-# Start dev server
-npm run dev
-```
-
-The app will be available at `http://localhost:5173`.
-
-Optional auth overrides for local/dev can be placed in `frontend/.env.local`:
-
-```bash
-VITE_USER_POOL_ID=your-user-pool-id
-VITE_USER_POOL_CLIENT_ID=your-user-pool-client-id
-VITE_COGNITO_DOMAIN=your-domain.auth.us-east-1.amazoncognito.com
-VITE_AUTH_REDIRECT_SIGN_IN=http://localhost:5173/login
-VITE_AUTH_REDIRECT_SIGN_OUT=http://localhost:5173/
-```
-
-### Collaboration WebSocket Server (Phase 1)
+### 1. Start the collaboration server
 
 ```bash
 cd collab-server
@@ -198,90 +34,65 @@ npm install
 npm start
 ```
 
-The server runs on `ws://localhost:1234` by default and now persists room snapshots to `collab-server/data/`.
-For an ephemeral in-memory server, run `npm run start:memory`.
-Health and readiness checks are exposed at `http://localhost:1234/healthz` and `http://localhost:1234/readyz`.
+By default it runs on `ws://localhost:1234`.
 
-### Infrastructure
+Useful endpoints:
+
+- Health: `http://localhost:1234/healthz`
+- Readiness: `http://localhost:1234/readyz`
+
+The server stores room snapshots in `collab-server/data/` unless you use:
 
 ```bash
-# Install dependencies
-cd infrastructure
-npm install
-
-# Synthesize CloudFormation template
-npx cdk synth
-
-# Deploy to AWS (requires configured credentials)
-npx cdk deploy
+npm run start:memory
 ```
 
-To provision Google sign-in with Cognito in the CDK stack, export these before `cdk deploy`:
+### 2. Start the frontend
 
 ```bash
-export GOOGLE_CLIENT_ID=your-google-oauth-client-id
-export GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
-export COGNITO_DOMAIN_PREFIX=your-unique-cognito-domain-prefix
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+The default `.env.example` points the editor at the local collaboration server:
+
+```bash
+VITE_COLLAB_WS_URL=ws://localhost:1234
+```
+
+## Custom auth and Google sign-in
+
+If you want to use your own Cognito setup instead of the default local values, set the frontend variables in `frontend/.env.local`:
+
+```bash
+VITE_USER_POOL_ID=
+VITE_USER_POOL_CLIENT_ID=
+VITE_COGNITO_DOMAIN=
+VITE_AUTH_REDIRECT_SIGN_IN=http://localhost:5173/login
+VITE_AUTH_REDIRECT_SIGN_OUT=http://localhost:5173/
+```
+
+To provision Google sign-in in the CDK stack, export these before `cd infrastructure && npx cdk deploy`:
+
+```bash
+export GOOGLE_CLIENT_ID=your-google-client-id
+export GOOGLE_CLIENT_SECRET=your-google-client-secret
+export COGNITO_DOMAIN_PREFIX=your-cognito-domain-prefix
 export AUTH_CALLBACK_URLS=http://localhost:5173/login
 export AUTH_LOGOUT_URLS=http://localhost:5173/
 ```
 
-Then add your Cognito hosted domain to the Google OAuth client:
+## Technical documentation
 
-```text
-Authorized JavaScript origins:
-https://<your-cognito-domain>
+For a detailed explanation of how the project works internally, including the frontend, Yjs collaboration flow, Cognito auth, AWS CDK resources, legacy pieces still in the repo, and dependency rationale, see:
 
-Authorized redirect URIs:
-https://<your-cognito-domain>/oauth2/idpresponse
-```
+- `docs/TECHNICAL_REPORT.md`
 
----
+## Current scope
 
-## 🗺 Roadmap
-
-| Week | Focus | Status |
-|:---:|---|---|
-| **1–2** | CDK infra, Cognito auth, DynamoDB schema, React shell, Monaco editor | 🟡 In Progress |
-| **3** | WebSocket API, Yjs collaborative sync, cursor presence | ⬜ Planned |
-| **4** | Sandboxed Lambda/Fargate code runner | ⬜ Planned |
-| **5–6** | Chime SDK video, problem bank, dashboard, deploy | ⬜ Planned |
-
----
-
-## 💰 Revenue Model
-
-Targeting the underserved mid-market — bootcamps and agencies priced out of enterprise solutions.
-
-| Tier | Price | Includes |
-|---|---|---|
-| **Free** | ₹0/mo | 5 sessions/month, JS only |
-| **Pro** | ₹999/mo | 50 sessions, all languages |
-| **Agency** | ₹2,499/mo | 100 sessions, all languages, video, analytics |
-| **Enterprise** | Custom | Unlimited, SSO, dedicated support |
-
----
-
-## 🤝 Contributing
-
-This project is in early development. Contributions are welcome!
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feat/your-feature`)
-3. Commit your changes (`git commit -m 'feat: add your feature'`)
-4. Push to the branch (`git push origin feat/your-feature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-<div align="center">
-
-**Built with ☕ and ambition.**
-
-</div>
+This repository currently delivers the authenticated collaborative editor experience.
+Some features mentioned in the product vision, such as code execution, video calling, analytics, and problem-bank workflows, are not yet implemented end-to-end in the running app.
