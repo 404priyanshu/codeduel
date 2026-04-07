@@ -20,10 +20,10 @@ export default function SessionPage() {
 
     // When remote code arrives, update state so the Editor sees the new value
     useEffect(() => {
-        if (remoteCode !== null) {
+        if (remoteCode !== null && remoteCode !== code) {
             setCode(remoteCode);
         }
-    }, [remoteCode]);
+    }, [remoteCode, code]);
 
     // handleChange is ONLY called for local keystrokes
     // (the Editor skips calling onChange during remote updates)

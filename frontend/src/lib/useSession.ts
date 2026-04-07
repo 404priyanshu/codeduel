@@ -5,9 +5,13 @@ export function useSession(sessionId: string) {
     const [connected, setConnected] = useState(false);
     const [remoteCode, setRemoteCode] = useState<string | null>(null);
     const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingCode = useRef<string | null>(null);
+    const lastSentCode = useRef<string>("");
+    const lastSendAt = useRef(0);
     const isMounted = useRef(true);
     const WS_URL = import.meta.env.VITE_WS_URL;
+    const SEND_INTERVAL_MS = 50;
 
     const connect = useCallback(() => {
         if (!isMounted.current) return;
@@ -33,7 +37,8 @@ export function useSession(sessionId: string) {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === "code") {
-                    setRemoteCode(data.code);
+                    // Skip duplicate payloads to avoid unnecessary rerenders.
+                    setRemoteCode((prev) => (prev === data.code ? prev : data.code));
                 }
             } catch (e) {
                 console.error("Failed to parse message", e);
@@ -49,24 +54,50 @@ export function useSession(sessionId: string) {
         return () => {
             isMounted.current = false;
             if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-            if (debounceTimer.current) clearTimeout(debounceTimer.current);
+            if (flushTimer.current) clearTimeout(flushTimer.current);
             ws.current?.close();
         };
     }, [connect]);
 
-    const sendCode = useCallback((code: string) => {
-        // Debounce — only send 300ms after user stops typing
-        if (debounceTimer.current) clearTimeout(debounceTimer.current);
-        debounceTimer.current = setTimeout(() => {
-            if (ws.current?.readyState === WebSocket.OPEN) {
-                ws.current.send(JSON.stringify({
-                    type: "code",
-                    sessionId,
-                    code,
-                }));
-            }
-        }, 300);
+    const flushPendingCode = useCallback(() => {
+        if (pendingCode.current === null) return;
+        if (ws.current?.readyState !== WebSocket.OPEN) return;
+        if (pendingCode.current === lastSentCode.current) return;
+
+        ws.current.send(
+            JSON.stringify({
+                type: "code",
+                sessionId,
+                code: pendingCode.current,
+            })
+        );
+        lastSentCode.current = pendingCode.current;
+        lastSendAt.current = Date.now();
     }, [sessionId]);
+
+    const sendCode = useCallback((code: string) => {
+        pendingCode.current = code;
+
+        if (code === lastSentCode.current) return;
+
+        const elapsed = Date.now() - lastSendAt.current;
+        const remaining = Math.max(0, SEND_INTERVAL_MS - elapsed);
+
+        if (remaining === 0) {
+            if (flushTimer.current) {
+                clearTimeout(flushTimer.current);
+                flushTimer.current = null;
+            }
+            flushPendingCode();
+            return;
+        }
+
+        if (flushTimer.current) return;
+        flushTimer.current = setTimeout(() => {
+            flushTimer.current = null;
+            flushPendingCode();
+        }, remaining);
+    }, [flushPendingCode]);
 
     return { connected, remoteCode, sendCode };
 }
