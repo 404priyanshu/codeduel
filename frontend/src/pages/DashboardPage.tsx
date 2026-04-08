@@ -1,195 +1,234 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { signOut } from "aws-amplify/auth";
-import { useAuth } from "../lib/useAuth";
-import Spline from '@splinetool/react-spline';
-import { motion } from 'framer-motion';
-import { LogOut, MonitorPlay, Users, Code2, Copy, Play } from 'lucide-react';
-import { ErrorBoundary } from '../components/ErrorBoundary';
+import Spline from "@splinetool/react-spline";
+import { motion } from "framer-motion";
+import {
+  ArrowRight,
+  Code2,
+  Copy,
+  LogOut,
+  MonitorPlay,
+  Play,
+  Sparkles,
+  Users,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/lib/useAuth";
 
 function generateSessionId() {
-    return Math.random().toString(36).substring(2, 10).toUpperCase();
+  return Math.random().toString(36).substring(2, 10).toUpperCase();
 }
 
 export default function DashboardPage() {
-    const { user } = useAuth();
-    const navigate = useNavigate();
-    const [joinCode, setJoinCode] = useState("");
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [joinCode, setJoinCode] = useState("");
 
-    const handleCreate = () => {
-        const id = generateSessionId();
-        navigate(`/session/${id}`);
-    };
+  const handleCreate = () => {
+    navigate(`/session/${generateSessionId()}`);
+  };
 
-    const handleJoin = () => {
-        if (!joinCode.trim()) return;
-        navigate(`/session/${joinCode.trim().toUpperCase()}`);
-    };
+  const handleJoin = () => {
+    if (!joinCode.trim()) return;
+    navigate(`/session/${joinCode.trim().toUpperCase()}`);
+  };
 
-    const handleSignOut = async () => {
-        await signOut();
-        navigate("/");
-    };
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        visible: { 
-            opacity: 1,
-            transition: { staggerChildren: 0.1, delayChildren: 0.2 }
-        }
-    };
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div className="absolute inset-0 z-0 opacity-80">
+        <ErrorBoundary fallback={<div className="absolute inset-0 bg-background" />}>
+          <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
+        </ErrorBoundary>
+      </div>
+      <div className="surface-grid absolute inset-0 z-0 opacity-20" />
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.14),transparent_28%),linear-gradient(180deg,hsl(var(--background)/0.58),hsl(var(--background)/0.92)_75%)]" />
 
-    const itemVariants = {
-        hidden: { opacity: 0, y: 20 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" as const } }
-    };
-
-    return (
-        <div className="relative min-h-screen w-full flex flex-col bg-gray-950 overflow-hidden">
-            
-            {/* SPLINE 3D BACKGROUND */}
-            <div className="absolute inset-0 z-0 opacity-80">
-                <ErrorBoundary fallback={<div className="absolute inset-0 bg-gray-950"></div>}>
-                    <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
-                </ErrorBoundary>
+      <header className="relative z-10 border-b border-border/70 bg-background/40 backdrop-blur-2xl">
+        <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6 md:px-10">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-2xl border border-primary/30 bg-primary/12 text-primary">
+              <Code2 className="size-5" />
             </div>
-            
-            {/* Dark overlay for readability */}
-            <div className="absolute inset-0 bg-gray-950/70 z-0 pointer-events-none"></div>
-
-            {/* Navbar (Glassmorphism) */}
-            <header className="relative z-10 h-16 border-b border-white/5 bg-black/40 backdrop-blur-md flex items-center justify-between px-6 md:px-12 sticky top-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-green-500/20 text-green-400 flex items-center justify-center border border-green-500/30">
-                        <Code2 size={18} />
-                    </div>
-                    <span className="text-white font-mono font-bold text-lg tracking-wide">
-                        CODEDUEL
-                    </span>
-                </div>
-                
-                <div className="flex items-center gap-6">
-                    <div className="hidden md:flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)] animate-pulse"></div>
-                        <span className="text-gray-400 font-mono text-xs">
-                            {user?.signInDetails?.loginId ?? user?.username}
-                        </span>
-                    </div>
-                    
-                    <button
-                        onClick={handleSignOut}
-                        className="group flex items-center gap-2 text-gray-400 hover:text-white font-mono text-xs transition-colors py-1 px-3 rounded-md hover:bg-white/5"
-                    >
-                        <span>SIGN OUT</span>
-                        <LogOut size={14} className="group-hover:text-red-400 transition-colors" />
-                    </button>
-                </div>
-            </header>
-
-            {/* Main Content */}
-            <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-6 md:p-12">
-                
-                <motion.div 
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
-                    className="text-center mb-12"
-                >
-                    <h1 className="text-4xl md:text-5xl text-white font-mono font-bold mb-4">
-                        Choose your path
-                    </h1>
-                    <p className="text-gray-400 font-mono text-sm max-w-md mx-auto">
-                        Start a new interview space or join an existing one using a room code.
-                    </p>
-                </motion.div>
-
-                <motion.div 
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="flex flex-col md:flex-row items-stretch justify-center gap-6 md:gap-10 w-full max-w-4xl"
-                >
-                    {/* Create Session Card */}
-                    <motion.div variants={itemVariants} className="flex-1">
-                        <div className="h-full glass-panel rounded-2xl p-8 border border-white/10 hover:border-green-500/50 transition-colors duration-300 group">
-                            <div className="w-12 h-12 rounded-xl bg-green-500/10 text-green-400 flex items-center justify-center mb-6 border border-green-500/20 group-hover:scale-110 transition-transform duration-300">
-                                <MonitorPlay size={24} />
-                            </div>
-                            
-                            <div className="text-green-400 font-mono text-xs tracking-widest font-bold mb-2">
-                                INTERVIEWER
-                            </div>
-                            <h2 className="text-2xl text-white font-mono font-bold mb-4">
-                                Create Session
-                            </h2>
-                            <p className="text-gray-400 font-mono text-sm leading-relaxed mb-8 flex-1">
-                                Launch a secure, ultra-low latency coding sandbox. Share the generated link with your candidate to begin assessing.
-                            </p>
-                            
-                            <button
-                                onClick={handleCreate}
-                                className="w-full bg-green-500 hover:bg-green-400 text-black font-mono font-bold text-sm py-3.5 px-6 rounded-xl transition-all shadow-[0_0_15px_rgba(34,197,94,0.2)] hover:shadow-[0_0_25px_rgba(34,197,94,0.4)] flex items-center justify-center"
-                            >
-                                <Play size={16} fill="currentColor" className="mr-2" />
-                                START NEW ROOM
-                            </button>
-                        </div>
-                    </motion.div>
-
-                    <motion.div variants={itemVariants} className="hidden md:flex items-center">
-                        <div className="w-[1px] h-32 bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
-                    </motion.div>
-
-                    <div className="flex md:hidden items-center justify-center py-2">
-                        <div className="h-[1px] w-32 bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-                    </div>
-
-                    {/* Join Session Card */}
-                    <motion.div variants={itemVariants} className="flex-1">
-                        <div className="h-full glass-panel rounded-2xl p-8 border border-white/10 hover:border-purple-500/50 transition-colors duration-300 group">
-                            <div className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-6 border border-purple-500/20 group-hover:scale-110 transition-transform duration-300">
-                                <Users size={24} />
-                            </div>
-                            
-                            <div className="text-purple-400 font-mono text-xs tracking-widest font-bold mb-2">
-                                CANDIDATE
-                            </div>
-                            <h2 className="text-2xl text-white font-mono font-bold mb-4">
-                                Join Session
-                            </h2>
-                            <p className="text-gray-400 font-mono text-sm leading-relaxed mb-6">
-                                Enter the 8-character session code provided by your interviewer to connect to the live coding environment.
-                            </p>
-                            
-                            <div className="mt-auto">
-                                <div className="relative mb-3">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
-                                        <Code2 size={16} />
-                                    </div>
-                                    <input
-                                        type="text"
-                                        placeholder="SESSION CODE"
-                                        value={joinCode}
-                                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                                        onKeyDown={(e) => e.key === "Enter" && handleJoin()}
-                                        className="w-full glass-input text-gray-100 font-mono text-sm pl-10 pr-4 py-3.5 rounded-xl outline-none focus:border-purple-500 tracking-[0.2em] font-medium"
-                                        maxLength={8}
-                                    />
-                                </div>
-                                <button
-                                    onClick={handleJoin}
-                                    disabled={!joinCode.trim()}
-                                    className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-gray-800 disabled:text-gray-500 text-white font-mono font-bold text-sm py-3.5 px-6 rounded-xl transition-all shadow-[0_0_15px_rgba(147,51,234,0.2)] hover:shadow-[0_0_25px_rgba(147,51,234,0.4)] disabled:shadow-none flex items-center justify-center"
-                                >
-                                    <Copy size={16} className="mr-2" />
-                                    CONNECT
-                                </button>
-                            </div>
-                        </div>
-                    </motion.div>
-                </motion.div>
-
+            <div>
+              <div className="font-mono text-lg font-bold tracking-wide text-foreground">
+                CODEDUEL
+              </div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                Collaboration dashboard
+              </div>
             </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Badge className="hidden font-mono md:inline-flex" variant="outline">
+              {user?.signInDetails?.loginId ?? user?.username}
+            </Badge>
+            <Button
+              variant="ghost"
+              className="font-mono text-xs uppercase tracking-[0.2em]"
+              onClick={handleSignOut}
+            >
+              <span>Sign out</span>
+              <LogOut className="size-4" />
+            </Button>
+          </div>
         </div>
-    );
+      </header>
+
+      <main className="relative z-10 mx-auto flex max-w-7xl flex-col px-6 py-12 md:px-10 md:py-16">
+        <motion.section
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+          className="mb-10 max-w-3xl"
+        >
+          <Badge className="mb-5 font-mono" variant="default">
+            <Sparkles className="size-3.5" />
+            Room control center
+          </Badge>
+          <h1 className="text-balance font-mono text-4xl font-bold tracking-tight text-foreground md:text-5xl">
+            Launch or join a live coding room in seconds.
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
+            Start a fresh interview session for an interviewer workflow, or jump
+            into an existing room with a shared code. The underlying editor stays
+            synced in real time through the collaboration server.
+          </p>
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, delay: 0.08 }}
+          className="grid gap-6 lg:grid-cols-[1fr_auto_1fr]"
+        >
+          <Card className="glass-panel overflow-hidden border-border/80">
+            <CardHeader className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Badge className="font-mono" variant="default">
+                  Interviewer
+                </Badge>
+                <div className="flex size-11 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary">
+                  <MonitorPlay className="size-5" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <CardTitle className="font-mono text-2xl uppercase">
+                  Create session
+                </CardTitle>
+                <CardDescription className="max-w-md text-sm leading-7">
+                  Generate a room code instantly and share it with a candidate.
+                  The editor is ready immediately, with persistence and reconnect
+                  support already in place.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+                <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                  Includes
+                </div>
+                <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
+                  <div>Shared Monaco editor with Yjs sync</div>
+                  <div>Language selection synchronized across clients</div>
+                  <div>Persistent room snapshots on the collab server</div>
+                </div>
+              </div>
+
+              <Button
+                size="lg"
+                className="w-full font-mono uppercase tracking-[0.2em]"
+                onClick={handleCreate}
+              >
+                <Play className="size-4 fill-current" />
+                Start new room
+              </Button>
+            </CardContent>
+          </Card>
+
+          <div className="hidden items-center justify-center lg:flex">
+            <Separator
+              orientation="vertical"
+              className="h-48 bg-gradient-to-b from-transparent via-border to-transparent"
+            />
+          </div>
+
+          <Card className="glass-panel overflow-hidden border-border/80">
+            <CardHeader className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Badge className="font-mono" variant="violet">
+                  Candidate
+                </Badge>
+                <div className="flex size-11 items-center justify-center rounded-2xl border border-violet-500/25 bg-violet-500/10 text-violet-300">
+                  <Users className="size-5" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <CardTitle className="font-mono text-2xl uppercase">
+                  Join session
+                </CardTitle>
+                <CardDescription className="max-w-md text-sm leading-7">
+                  Enter the 8-character room code from your interviewer and land
+                  directly inside the live collaborative editor.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+                <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                  Session code
+                </div>
+                <div className="relative">
+                  <Code2 className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="SESSION CODE"
+                    value={joinCode}
+                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleJoin();
+                      }
+                    }}
+                    className="h-12 pl-10 font-mono tracking-[0.3em] uppercase"
+                    maxLength={8}
+                  />
+                </div>
+              </div>
+
+              <Button
+                size="lg"
+                variant="secondary"
+                className="w-full bg-violet-500/90 font-mono uppercase tracking-[0.2em] text-white hover:bg-violet-400"
+                onClick={handleJoin}
+                disabled={!joinCode.trim()}
+              >
+                <Copy className="size-4" />
+                Connect to room
+                <ArrowRight className="size-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.section>
+      </main>
+    </div>
+  );
 }

@@ -1,33 +1,115 @@
 @import "tailwindcss";
 
-html, body {
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden; /* Fixes any horizontal overflow */
-  background-color: #030712; /* tailwind gray-950 */
-  color: #f3f4f6; /* tailwind gray-100 */
-  min-height: 100vh;
+:root {
+  --background: 224 43% 7%;
+  --foreground: 210 40% 96%;
+  --card: 224 34% 12%;
+  --card-foreground: 210 40% 96%;
+  --popover: 224 36% 10%;
+  --popover-foreground: 210 40% 96%;
+  --primary: 142 76% 48%;
+  --primary-foreground: 222 47% 8%;
+  --secondary: 222 28% 18%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 223 24% 18%;
+  --muted-foreground: 215 20% 70%;
+  --accent: 224 26% 16%;
+  --accent-foreground: 210 40% 96%;
+  --destructive: 0 72% 51%;
+  --border: 217 21% 22%;
+  --input: 223 26% 16%;
+  --ring: 142 76% 48%;
+  --radius: 1rem;
 }
 
-/* Base custom classes for glassmorphism */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-sm: calc(var(--radius) - 0.25rem);
+  --radius-md: calc(var(--radius) - 0.125rem);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 0.25rem);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100vh;
+  }
+
+  body {
+    margin: 0;
+    overflow-x: hidden;
+    background:
+      radial-gradient(circle at top, hsl(var(--primary) / 0.13), transparent 28%),
+      linear-gradient(180deg, hsl(224 43% 7%), hsl(224 48% 5%));
+    color: hsl(var(--foreground));
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
 .glass-panel {
-  background: rgba(17, 24, 39, 0.4); /* Dark translucent background */
-  backdrop-filter: blur(16px);
+  background:
+    linear-gradient(180deg, hsl(var(--card) / 0.88), hsl(var(--card) / 0.66));
+  backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+  border: 1px solid hsl(var(--border) / 0.9);
+  box-shadow:
+    inset 0 1px 0 hsl(var(--foreground) / 0.04),
+    0 20px 80px hsl(var(--background) / 0.55);
 }
 
 .glass-input {
-  background: rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: hsl(var(--input) / 0.68);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid hsl(var(--border) / 0.8);
   transition: all 0.3s ease;
 }
 
 .glass-input:focus {
-  border-color: rgba(34, 197, 94, 0.8); /* Green primary */
-  background: rgba(0, 0, 0, 0.4);
+  border-color: hsl(var(--ring));
+  background: hsl(var(--input) / 0.82);
   outline: none;
+}
+
+.surface-grid {
+  background-image:
+    linear-gradient(hsl(var(--border) / 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--border) / 0.18) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.text-balance {
+  text-wrap: balance;
 }

@@ -1,489 +1,486 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, useScroll, useTransform, useInView } from "framer-motion";
+import { motion, useInView, useScroll, useTransform } from "framer-motion";
 import Spline from "@splinetool/react-spline";
 import {
-    Code2,
-    ArrowRight,
-    Zap,
-    Shield,
-    Globe,
-    Users,
-    Terminal,
-    Eye,
-    ChevronDown,
-    Play,
-    Sparkles,
-    MonitorPlay,
+  ArrowRight,
+  ChevronDown,
+  Code2,
+  Eye,
+  Globe,
+  MonitorPlay,
+  Play,
+  Shield,
+  Sparkles,
+  Terminal,
+  Users,
+  Zap,
 } from "lucide-react";
-import { ErrorBoundary } from "../components/ErrorBoundary";
-import { useAuth } from "../lib/useAuth";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/lib/useAuth";
 
-/* ------------------------------------------------------------------ */
-/*  Animated code block that types itself                              */
-/* ------------------------------------------------------------------ */
 const CODE_LINES = [
-    { text: "function", cls: "text-purple-400" },
-    { text: " twoSum", cls: "text-green-400" },
-    { text: "(nums, target) {", cls: "text-gray-300" },
-    { text: "  const map = ", cls: "text-gray-300" },
-    { text: "new", cls: "text-purple-400" },
-    { text: " Map();", cls: "text-gray-300" },
-    { text: "  for (let i = 0; i < nums.length; i++) {", cls: "text-gray-300" },
-    { text: "    const comp = target - nums[i];", cls: "text-gray-300" },
-    { text: "    if (map.has(comp)) ", cls: "text-gray-300" },
-    { text: "return", cls: "text-purple-400" },
-    { text: " [map.get(comp), i];", cls: "text-green-400" },
-    { text: "    map.set(nums[i], i);", cls: "text-gray-300" },
-    { text: "  }", cls: "text-gray-500" },
-    { text: "}", cls: "text-gray-500" },
+  { text: "function", className: "text-violet-300" },
+  { text: " twoSum", className: "text-primary" },
+  { text: "(nums, target) {", className: "text-slate-200" },
+  { text: "  const map = ", className: "text-slate-300" },
+  { text: "new", className: "text-violet-300" },
+  { text: " Map();", className: "text-slate-200" },
+  { text: "  for (let i = 0; i < nums.length; i++) {", className: "text-slate-300" },
+  { text: "    const comp = target - nums[i];", className: "text-slate-300" },
+  { text: "    if (map.has(comp)) ", className: "text-slate-300" },
+  { text: "return", className: "text-violet-300" },
+  { text: " [map.get(comp), i];", className: "text-primary" },
+  { text: "    map.set(nums[i], i);", className: "text-slate-300" },
+  { text: "  }", className: "text-slate-500" },
+  { text: "}", className: "text-slate-500" },
 ];
 
 function AnimatedCodeBlock() {
-    return (
-        <div className="font-mono text-xs sm:text-sm leading-6 select-none">
-            {CODE_LINES.map((line, i) => (
-                <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.8 + i * 0.12, duration: 0.3 }}
-                >
-                    <span className="text-gray-600 mr-4 select-none inline-block w-5 text-right">
-                        {i + 1}
-                    </span>
-                    <span className={line.cls}>{line.text}</span>
-                    {/* blinking cursor on last visible line */}
-                    {i === CODE_LINES.length - 1 && (
-                        <span className="inline-block w-[7px] h-4 bg-green-400 ml-1 animate-pulse rounded-sm align-middle" />
-                    )}
-                </motion.div>
-            ))}
-        </div>
-    );
+  return (
+    <div className="font-mono text-xs leading-6 sm:text-sm">
+      {CODE_LINES.map((line, index) => (
+        <motion.div
+          key={index}
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.8 + index * 0.12, duration: 0.28 }}
+        >
+          <span className="mr-4 inline-block w-5 text-right text-slate-600">
+            {index + 1}
+          </span>
+          <span className={line.className}>{line.text}</span>
+          {index === CODE_LINES.length - 1 ? (
+            <span className="ml-1 inline-block h-4 w-[7px] animate-pulse rounded-sm bg-primary align-middle" />
+          ) : null}
+        </motion.div>
+      ))}
+    </div>
+  );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Section wrapper with scroll-triggered reveal                      */
-/* ------------------------------------------------------------------ */
 function RevealSection({
-    children,
-    className = "",
-    id,
+  children,
+  className = "",
+  id,
 }: {
-    children: React.ReactNode;
-    className?: string;
-    id?: string;
+  children: ReactNode;
+  className?: string;
+  id?: string;
 }) {
-    const ref = useRef(null);
-    const isInView = useInView(ref, { once: true, margin: "-80px" });
+  const ref = useRef<HTMLElement | null>(null);
+  const isInView = useInView(ref, { once: true, margin: "-80px" });
 
-    return (
-        <motion.section
-            ref={ref}
-            id={id}
-            initial={{ opacity: 0, y: 40 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className={className}
-        >
-            {children}
-        </motion.section>
-    );
+  return (
+    <motion.section
+      ref={ref}
+      id={id}
+      initial={{ opacity: 0, y: 32 }}
+      animate={isInView ? { opacity: 1, y: 0 } : {}}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.section>
+  );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Feature card                                                       */
-/* ------------------------------------------------------------------ */
-interface FeatureCardProps {
-    icon: React.ReactNode;
-    title: string;
-    description: string;
-    accent: string; // tailwind color token like "green" or "purple"
-    delay?: number;
+function FeatureCard({
+  icon,
+  title,
+  description,
+  badgeVariant,
+  delay,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  badgeVariant: "default" | "violet" | "outline";
+  delay: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ delay, duration: 0.45 }}
+    >
+      <Card className="glass-panel h-full border-border/80 transition-transform duration-300 hover:-translate-y-1">
+        <CardHeader className="space-y-4">
+          <Badge className="w-fit font-mono" variant={badgeVariant}>
+            {icon}
+            Feature
+          </Badge>
+          <div className="space-y-2">
+            <CardTitle className="font-mono text-lg uppercase">{title}</CardTitle>
+            <CardDescription className="text-sm leading-7">
+              {description}
+            </CardDescription>
+          </div>
+        </CardHeader>
+      </Card>
+    </motion.div>
+  );
 }
 
-function FeatureCard({ icon, title, description, accent, delay = 0 }: FeatureCardProps) {
-    const borderHover = accent === "green" ? "hover:border-green-500/40" : accent === "purple" ? "hover:border-purple-500/40" : "hover:border-cyan-500/40";
-    const iconBg = accent === "green" ? "bg-green-500/10 text-green-400 border-green-500/20" : accent === "purple" ? "bg-purple-500/10 text-purple-400 border-purple-500/20" : "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ delay, duration: 0.5, ease: "easeOut" }}
-            className={`glass-panel rounded-2xl p-6 md:p-8 border border-white/5 ${borderHover} transition-all duration-300 group`}
-        >
-            <div className={`w-11 h-11 rounded-xl ${iconBg} flex items-center justify-center mb-5 border group-hover:scale-110 transition-transform duration-300`}>
-                {icon}
-            </div>
-            <h3 className="text-white font-mono font-bold text-base mb-2">{title}</h3>
-            <p className="text-gray-400 font-mono text-sm leading-relaxed">{description}</p>
-        </motion.div>
-    );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Step card (How it works)                                           */
-/* ------------------------------------------------------------------ */
 function StepCard({
-    number,
-    title,
-    description,
-    delay = 0,
+  number,
+  title,
+  description,
+  delay,
 }: {
-    number: string;
-    title: string;
-    description: string;
-    delay?: number;
+  number: string;
+  title: string;
+  description: string;
+  delay: number;
 }) {
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay, duration: 0.5 }}
-            className="relative flex flex-col items-center text-center"
-        >
-            <div className="w-14 h-14 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center mb-5 text-green-400 font-mono font-bold text-xl shadow-[0_0_20px_rgba(34,197,94,0.15)]">
-                {number}
-            </div>
-            <h3 className="text-white font-mono font-bold text-base mb-2">{title}</h3>
-            <p className="text-gray-400 font-mono text-sm leading-relaxed max-w-xs">{description}</p>
-        </motion.div>
-    );
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ delay, duration: 0.45 }}
+    >
+      <Card className="glass-panel h-full border-border/80 text-center">
+        <CardHeader className="items-center space-y-4">
+          <div className="flex size-14 items-center justify-center rounded-full border border-primary/30 bg-primary/12 font-mono text-lg font-bold text-primary shadow-[0_0_30px_hsl(var(--primary)/0.12)]">
+            {number}
+          </div>
+          <div className="space-y-2">
+            <CardTitle className="font-mono text-lg uppercase">{title}</CardTitle>
+            <CardDescription className="text-sm leading-7">
+              {description}
+            </CardDescription>
+          </div>
+        </CardHeader>
+      </Card>
+    </motion.div>
+  );
 }
 
-/* ================================================================== */
-/*  LANDING PAGE                                                       */
-/* ================================================================== */
 export default function LandingPage() {
-    const navigate = useNavigate();
-    const { user, loading } = useAuth();
-    const heroRef = useRef<HTMLDivElement>(null);
-    const { scrollYProgress } = useScroll();
-    const heroOpacity = useTransform(scrollYProgress, [0, 0.15], [1, 0]);
-    const heroScale = useTransform(scrollYProgress, [0, 0.15], [1, 0.96]);
+  const navigate = useNavigate();
+  const { user, loading } = useAuth();
+  const heroRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll();
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.15], [1, 0]);
+  const heroScale = useTransform(scrollYProgress, [0, 0.15], [1, 0.96]);
 
-    const ctaAction = () => {
-        if (!loading && user) {
-            navigate("/dashboard");
-        } else {
-            navigate("/login");
-        }
-    };
+  const ctaAction = () => {
+    navigate(!loading && user ? "/dashboard" : "/login");
+  };
 
-    return (
-        <div className="relative min-h-screen w-full bg-gray-950 overflow-x-hidden">
-            {/* ============ NAVBAR ============ */}
-            <nav className="fixed top-0 left-0 right-0 z-50 h-16 bg-gray-950/60 backdrop-blur-xl border-b border-white/5">
-                <div className="max-w-7xl mx-auto h-full flex items-center justify-between px-6 md:px-12">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-green-500/20 text-green-400 flex items-center justify-center border border-green-500/30">
-                            <Code2 size={18} />
-                        </div>
-                        <span className="text-white font-mono font-bold text-lg tracking-wide">
-                            CODEDUEL
-                        </span>
-                    </div>
+  return (
+    <div className="relative min-h-screen overflow-x-hidden bg-background">
+      <nav className="fixed inset-x-0 top-0 z-50 border-b border-border/60 bg-background/45 backdrop-blur-2xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 md:px-10">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-2xl border border-primary/30 bg-primary/12 text-primary">
+              <Code2 className="size-5" />
+            </div>
+            <div>
+              <div className="font-mono text-lg font-bold tracking-wide text-foreground">
+                CODEDUEL
+              </div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.26em] text-muted-foreground">
+                Real-time coding interviews
+              </div>
+            </div>
+          </div>
 
-                    <div className="flex items-center gap-3">
-                        <a
-                            href="#features"
-                            className="hidden md:inline-block text-gray-400 hover:text-white font-mono text-xs tracking-wide transition-colors px-3 py-1"
-                        >
-                            FEATURES
-                        </a>
-                        <a
-                            href="#how-it-works"
-                            className="hidden md:inline-block text-gray-400 hover:text-white font-mono text-xs tracking-wide transition-colors px-3 py-1"
-                        >
-                            HOW IT WORKS
-                        </a>
-                        <button
-                            onClick={ctaAction}
-                            className="bg-green-500 hover:bg-green-400 text-black font-mono font-bold text-xs py-2 px-5 rounded-lg transition-all shadow-[0_0_15px_rgba(34,197,94,0.2)] hover:shadow-[0_0_25px_rgba(34,197,94,0.4)]"
-                        >
-                            {!loading && user ? "DASHBOARD" : "GET STARTED"}
-                        </button>
-                    </div>
-                </div>
-            </nav>
+          <div className="flex items-center gap-3">
+            <Button asChild variant="ghost" className="hidden font-mono text-xs uppercase tracking-[0.16em] md:inline-flex">
+              <a href="#features">Features</a>
+            </Button>
+            <Button asChild variant="ghost" className="hidden font-mono text-xs uppercase tracking-[0.16em] md:inline-flex">
+              <a href="#how-it-works">How it works</a>
+            </Button>
+            <Button className="font-mono text-xs uppercase tracking-[0.2em]" onClick={ctaAction}>
+              {!loading && user ? "Dashboard" : "Get started"}
+            </Button>
+          </div>
+        </div>
+      </nav>
 
-            {/* ============ HERO ============ */}
+      <motion.div
+        ref={heroRef}
+        style={{ opacity: heroOpacity, scale: heroScale }}
+        className="relative flex min-h-screen items-center justify-center pt-16"
+      >
+        <div className="absolute inset-0 z-0">
+          <ErrorBoundary fallback={<div className="absolute inset-0 bg-background" />}>
+            <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
+          </ErrorBoundary>
+        </div>
+        <div className="surface-grid absolute inset-0 z-[1] opacity-20" />
+        <div className="absolute inset-0 z-[1] bg-gradient-to-b from-background/35 via-background/55 to-background" />
+
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-12 px-6 py-20 md:px-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:gap-16">
+          <div className="text-center lg:text-left">
             <motion.div
-                ref={heroRef}
-                style={{ opacity: heroOpacity, scale: heroScale }}
-                className="relative min-h-screen flex items-center justify-center pt-16"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.08 }}
             >
-                {/* Spline 3D background */}
-                <div className="absolute inset-0 z-0">
-                    <ErrorBoundary fallback={<div className="absolute inset-0 bg-gray-950" />}>
-                        <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
-                    </ErrorBoundary>
-                </div>
-                <div className="absolute inset-0 bg-gradient-to-b from-gray-950/40 via-gray-950/60 to-gray-950 z-[1] pointer-events-none" />
-
-                <div className="relative z-10 max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12 lg:gap-20 px-6 md:px-12 py-20">
-                    {/* Left: Copy */}
-                    <div className="flex-1 text-center lg:text-left">
-                        <motion.div
-                            initial={{ opacity: 0, y: 30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.7, delay: 0.1 }}
-                        >
-                            <span className="inline-flex items-center gap-2 bg-green-500/10 text-green-400 font-mono text-xs tracking-widest px-4 py-1.5 rounded-full border border-green-500/20 mb-6">
-                                <Sparkles size={14} />
-                                REAL-TIME COLLABORATIVE CODING
-                            </span>
-                        </motion.div>
-
-                        <motion.h1
-                            initial={{ opacity: 0, y: 30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.7, delay: 0.25 }}
-                            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl text-white font-mono font-bold leading-[1.1] mb-6"
-                        >
-                            Code together.{" "}
-                            <span className="bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent">
-                                Hire smarter.
-                            </span>
-                        </motion.h1>
-
-                        <motion.p
-                            initial={{ opacity: 0, y: 30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.7, delay: 0.4 }}
-                            className="text-gray-400 font-mono text-sm md:text-base leading-relaxed max-w-lg mx-auto lg:mx-0 mb-10"
-                        >
-                            A zero-friction live coding environment built for technical interviews.
-                            Watch candidates think in real time — no downloads, no setup, no distractions.
-                        </motion.p>
-
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.7, delay: 0.55 }}
-                            className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start"
-                        >
-                            <button
-                                onClick={ctaAction}
-                                className="group bg-green-500 hover:bg-green-400 text-black font-mono font-bold text-sm py-3.5 px-8 rounded-xl transition-all shadow-[0_0_25px_rgba(34,197,94,0.25)] hover:shadow-[0_0_35px_rgba(34,197,94,0.5)] flex items-center"
-                            >
-                                <Play size={16} fill="currentColor" className="mr-2" />
-                                START FOR FREE
-                                <ArrowRight
-                                    size={16}
-                                    className="ml-2 group-hover:translate-x-1 transition-transform"
-                                />
-                            </button>
-                            <a
-                                href="#features"
-                                className="text-gray-400 hover:text-white font-mono text-sm flex items-center gap-2 transition-colors"
-                            >
-                                Learn more
-                                <ChevronDown size={16} className="animate-bounce" />
-                            </a>
-                        </motion.div>
-                    </div>
-
-                    {/* Right: Animated code editor preview */}
-                    <motion.div
-                        initial={{ opacity: 0, x: 40 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.8, delay: 0.5 }}
-                        className="flex-1 max-w-xl w-full"
-                    >
-                        <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden shadow-2xl shadow-black/50">
-                            {/* Window chrome */}
-                            <div className="flex items-center gap-2 px-4 py-3 bg-black/40 border-b border-white/5">
-                                <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                                <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                                <div className="w-3 h-3 rounded-full bg-green-500/80" />
-                                <span className="ml-3 text-gray-500 font-mono text-xs">
-                                    solution.js — CODEDUEL
-                                </span>
-                                <div className="ml-auto flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                                    <span className="text-gray-500 font-mono text-[10px]">LIVE</span>
-                                </div>
-                            </div>
-                            {/* Code area */}
-                            <div className="p-5 bg-[#0d1117]">
-                                <AnimatedCodeBlock />
-                            </div>
-                            {/* Status bar */}
-                            <div className="flex items-center justify-between px-4 py-2 bg-black/30 border-t border-white/5">
-                                <span className="text-gray-600 font-mono text-[10px]">
-                                    JavaScript • UTF-8
-                                </span>
-                                <span className="text-green-500/70 font-mono text-[10px] flex items-center gap-1">
-                                    <Users size={10} /> 2 connected
-                                </span>
-                            </div>
-                        </div>
-                    </motion.div>
-                </div>
-
-                {/* Scroll indicator */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 2 }}
-                    className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10"
-                >
-                    <ChevronDown size={24} className="text-gray-600 animate-bounce" />
-                </motion.div>
+              <Badge className="mb-6 font-mono" variant="default">
+                <Sparkles className="size-3.5" />
+                Collaborative coding rooms
+              </Badge>
             </motion.div>
 
-            {/* ============ FEATURES ============ */}
-            <RevealSection id="features" className="relative z-10 py-24 md:py-32">
-                <div className="max-w-7xl mx-auto px-6 md:px-12">
-                    <div className="text-center mb-16">
-                        <span className="text-green-400 font-mono text-xs tracking-widest font-bold mb-3 block">
-                            FEATURES
-                        </span>
-                        <h2 className="text-3xl md:text-4xl text-white font-mono font-bold mb-4">
-                            Everything you need to assess talent
-                        </h2>
-                        <p className="text-gray-400 font-mono text-sm max-w-lg mx-auto">
-                            Designed from the ground up for a seamless, distraction-free interview experience.
-                        </p>
-                    </div>
+            <motion.h1
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.18 }}
+              className="text-balance font-mono text-4xl font-bold leading-[1.02] text-foreground sm:text-5xl lg:text-7xl"
+            >
+              Code together.
+              <span className="block bg-gradient-to-r from-primary to-emerald-200 bg-clip-text text-transparent">
+                Interview with confidence.
+              </span>
+            </motion.h1>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <FeatureCard
-                            icon={<Zap size={22} />}
-                            title="Real-Time Sync"
-                            description="Sub-100ms WebSocket latency. Every keystroke arrives instantly — no lag, no drift, no stale state."
-                            accent="green"
-                            delay={0}
-                        />
-                        <FeatureCard
-                            icon={<Eye size={22} />}
-                            title="Live Observer Mode"
-                            description="Watch candidates code in real time. See their thought process unfold as they work through problems."
-                            accent="purple"
-                            delay={0.1}
-                        />
-                        <FeatureCard
-                            icon={<Terminal size={22} />}
-                            title="Monaco Editor"
-                            description="Full VS Code editing experience. Syntax highlighting, autocomplete, and multi-language support built in."
-                            accent="cyan"
-                            delay={0.2}
-                        />
-                        <FeatureCard
-                            icon={<Shield size={22} />}
-                            title="Secure Sessions"
-                            description="Unique room codes, authenticated access, and encrypted WebSocket connections keep sessions private."
-                            accent="green"
-                            delay={0.3}
-                        />
-                        <FeatureCard
-                            icon={<Globe size={22} />}
-                            title="Zero Setup"
-                            description="No downloads. No extensions. No configuration. Share a link, and your candidate is coding in seconds."
-                            accent="purple"
-                            delay={0.4}
-                        />
-                        <FeatureCard
-                            icon={<MonitorPlay size={22} />}
-                            title="Multi-Language"
-                            description="JavaScript, TypeScript, Python, Java, C++ — candidates pick their language of choice without restriction."
-                            accent="cyan"
-                            delay={0.5}
-                        />
-                    </div>
+            <motion.p
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.3 }}
+              className="mx-auto mt-6 max-w-2xl text-sm leading-8 text-muted-foreground md:text-base lg:mx-0"
+            >
+              CodeDuel gives interviewers and candidates a shared Monaco editor,
+              synchronized language selection, and a low-friction room flow backed
+              by a dedicated collaboration server.
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.42 }}
+              className="mt-8 flex flex-col items-center gap-4 sm:flex-row lg:justify-start"
+            >
+              <Button
+                size="lg"
+                className="font-mono uppercase tracking-[0.2em]"
+                onClick={ctaAction}
+              >
+                <Play className="size-4 fill-current" />
+                Start for free
+                <ArrowRight className="size-4" />
+              </Button>
+
+              <Button asChild variant="ghost" className="font-mono uppercase tracking-[0.18em] text-muted-foreground">
+                <a href="#features">
+                  Learn more
+                  <ChevronDown className="size-4 animate-bounce" />
+                </a>
+              </Button>
+            </motion.div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.75, delay: 0.35 }}
+          >
+            <Card className="glass-panel overflow-hidden border-border/80">
+              <CardHeader className="border-b border-border/70 bg-background/35 py-4">
+                <div className="flex items-center gap-2">
+                  <div className="size-3 rounded-full bg-red-400/90" />
+                  <div className="size-3 rounded-full bg-amber-300/90" />
+                  <div className="size-3 rounded-full bg-primary/90" />
+                  <span className="ml-3 font-mono text-xs text-muted-foreground">
+                    solution.js — CODEDUEL
+                  </span>
+                  <Badge className="ml-auto font-mono" variant="success">
+                    <Users className="size-3.5" />
+                    2 connected
+                  </Badge>
                 </div>
-            </RevealSection>
-
-            {/* ============ HOW IT WORKS ============ */}
-            <RevealSection id="how-it-works" className="relative z-10 py-24 md:py-32">
-                <div className="max-w-5xl mx-auto px-6 md:px-12">
-                    <div className="text-center mb-16">
-                        <span className="text-green-400 font-mono text-xs tracking-widest font-bold mb-3 block">
-                            HOW IT WORKS
-                        </span>
-                        <h2 className="text-3xl md:text-4xl text-white font-mono font-bold mb-4">
-                            Three steps to a better interview
-                        </h2>
-                        <p className="text-gray-400 font-mono text-sm max-w-lg mx-auto">
-                            From room creation to live collaboration in under 30 seconds.
-                        </p>
-                    </div>
-
-                    <div className="relative grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-8">
-                        {/* Connecting line (desktop only) */}
-                        <div className="hidden md:block absolute top-7 left-[16.5%] right-[16.5%] h-[1px] bg-gradient-to-r from-green-500/30 via-green-500/20 to-green-500/30" />
-
-                        <StepCard
-                            number="01"
-                            title="Create a Room"
-                            description="Hit 'Start New Room' from your dashboard. A unique session code is generated instantly."
-                            delay={0}
-                        />
-                        <StepCard
-                            number="02"
-                            title="Share the Code"
-                            description="Send the 8-character room code to your candidate. They enter it and connect in one click."
-                            delay={0.15}
-                        />
-                        <StepCard
-                            number="03"
-                            title="Code Together"
-                            description="Both of you see every keystroke in real time. Ask questions, watch their approach, assess live."
-                            delay={0.3}
-                        />
-                    </div>
-                </div>
-            </RevealSection>
-
-            {/* ============ CTA ============ */}
-            <RevealSection className="relative z-10 py-24 md:py-32">
-                <div className="max-w-3xl mx-auto px-6 md:px-12 text-center">
-                    <motion.div
-                        className="glass-panel rounded-3xl p-10 md:p-16 border border-white/10 relative overflow-hidden"
-                        whileHover={{ borderColor: "rgba(34,197,94,0.3)" }}
-                    >
-                        {/* Subtle glow */}
-                        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-green-500/10 rounded-full blur-3xl pointer-events-none" />
-
-                        <h2 className="relative text-3xl md:text-4xl text-white font-mono font-bold mb-4">
-                            Ready to interview smarter?
-                        </h2>
-                        <p className="relative text-gray-400 font-mono text-sm mb-8 max-w-md mx-auto">
-                            Join teams who have already moved beyond screen-sharing and hacky setups. Start running real-time coding interviews today.
-                        </p>
-                        <button
-                            onClick={ctaAction}
-                            className="relative group bg-green-500 hover:bg-green-400 text-black font-mono font-bold text-sm py-3.5 px-10 rounded-xl transition-all shadow-[0_0_25px_rgba(34,197,94,0.3)] hover:shadow-[0_0_35px_rgba(34,197,94,0.5)] flex items-center mx-auto"
-                        >
-                            {!loading && user ? "GO TO DASHBOARD" : "GET STARTED — IT'S FREE"}
-                            <ArrowRight
-                                size={16}
-                                className="ml-2 group-hover:translate-x-1 transition-transform"
-                            />
-                        </button>
-                    </motion.div>
-                </div>
-            </RevealSection>
-
-            {/* ============ FOOTER ============ */}
-            <footer className="relative z-10 border-t border-white/5 py-8">
-                <div className="max-w-7xl mx-auto px-6 md:px-12 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        <Code2 size={16} className="text-green-400" />
-                        <span className="text-gray-500 font-mono text-xs">
-                            CODEDUEL — Real-time technical interviews
-                        </span>
-                    </div>
-                    <span className="text-gray-600 font-mono text-xs">
-                        © {new Date().getFullYear()} CodeDuel. All rights reserved.
-                    </span>
-                </div>
-            </footer>
+              </CardHeader>
+              <CardContent className="bg-[#0d1117] p-5">
+                <AnimatedCodeBlock />
+              </CardContent>
+              <div className="flex items-center justify-between border-t border-border/70 bg-black/25 px-5 py-3">
+                <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  JavaScript • UTF-8
+                </span>
+                <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-primary">
+                  Live session
+                </span>
+              </div>
+            </Card>
+          </motion.div>
         </div>
-    );
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.3 }}
+          className="absolute bottom-8 left-1/2 z-10 -translate-x-1/2"
+        >
+          <ChevronDown className="size-6 animate-bounce text-muted-foreground" />
+        </motion.div>
+      </motion.div>
+
+      <RevealSection id="features" className="relative z-10 py-24 md:py-30">
+        <div className="mx-auto max-w-7xl px-6 md:px-10">
+          <div className="mx-auto mb-14 max-w-2xl text-center">
+            <Badge className="mb-4 font-mono" variant="outline">
+              Product features
+            </Badge>
+            <h2 className="text-balance font-mono text-3xl font-bold text-foreground md:text-4xl">
+              Built to keep collaborative interviews fast, focused, and reliable.
+            </h2>
+            <p className="mt-4 text-sm leading-7 text-muted-foreground">
+              The current product centers on the shared editor workflow and the
+              infrastructure that makes that experience stable for two connected users.
+            </p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            <FeatureCard
+              icon={<Zap className="size-3.5" />}
+              title="Real-time sync"
+              description="Yjs CRDT updates keep both participants aligned even during concurrent edits and reconnects."
+              badgeVariant="default"
+              delay={0}
+            />
+            <FeatureCard
+              icon={<Eye className="size-3.5" />}
+              title="Shared visibility"
+              description="Both people watch the same editor state live, which makes it easier to assess problem-solving in context."
+              badgeVariant="violet"
+              delay={0.08}
+            />
+            <FeatureCard
+              icon={<Terminal className="size-3.5" />}
+              title="Monaco editing"
+              description="The session runs on top of Monaco, giving the experience the familiarity of a modern code editor."
+              badgeVariant="outline"
+              delay={0.16}
+            />
+            <FeatureCard
+              icon={<Shield className="size-3.5" />}
+              title="Protected access"
+              description="Cognito-backed authentication protects the main app routes and keeps room entry inside signed-in workflows."
+              badgeVariant="default"
+              delay={0.24}
+            />
+            <FeatureCard
+              icon={<Globe className="size-3.5" />}
+              title="Low-friction rooms"
+              description="Create a room instantly or join with a code instead of provisioning a heavy session ahead of time."
+              badgeVariant="violet"
+              delay={0.32}
+            />
+            <FeatureCard
+              icon={<MonitorPlay className="size-3.5" />}
+              title="Synchronized language"
+              description="When one participant switches languages, the other editor updates too, keeping the room context consistent."
+              badgeVariant="outline"
+              delay={0.4}
+            />
+          </div>
+        </div>
+      </RevealSection>
+
+      <RevealSection id="how-it-works" className="relative z-10 py-24 md:py-30">
+        <div className="mx-auto max-w-6xl px-6 md:px-10">
+          <div className="mx-auto mb-14 max-w-2xl text-center">
+            <Badge className="mb-4 font-mono" variant="default">
+              How it works
+            </Badge>
+            <h2 className="text-balance font-mono text-3xl font-bold text-foreground md:text-4xl">
+              Three steps from dashboard to live room.
+            </h2>
+            <p className="mt-4 text-sm leading-7 text-muted-foreground">
+              The product stays intentionally simple: create a code, share it, and collaborate in the same editor.
+            </p>
+          </div>
+
+          <div className="relative grid gap-6 md:grid-cols-3">
+            <div className="pointer-events-none absolute top-1/2 left-[16%] right-[16%] hidden -translate-y-1/2 md:block">
+              <Separator className="bg-gradient-to-r from-transparent via-border to-transparent" />
+            </div>
+
+            <StepCard
+              number="01"
+              title="Create room"
+              description="The dashboard generates a room code client-side and sends you directly into a fresh session route."
+              delay={0}
+            />
+            <StepCard
+              number="02"
+              title="Share access"
+              description="Send the room code to the other participant so they can join the same collaborative editing space."
+              delay={0.12}
+            />
+            <StepCard
+              number="03"
+              title="Code live"
+              description="Both browsers connect to the collab server, sync the Yjs document, and keep editor state aligned."
+              delay={0.24}
+            />
+          </div>
+        </div>
+      </RevealSection>
+
+      <RevealSection className="relative z-10 py-24 md:py-30">
+        <div className="mx-auto max-w-4xl px-6 md:px-10">
+          <Card className="glass-panel overflow-hidden border-border/80 text-center">
+            <CardHeader className="relative items-center pb-4">
+              <div className="absolute -top-24 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
+              <Badge className="relative mb-4 font-mono" variant="success">
+                Ready when you are
+              </Badge>
+              <CardTitle className="relative text-balance font-mono text-3xl uppercase md:text-4xl">
+                Move beyond screen sharing and into a real shared editor.
+              </CardTitle>
+              <CardDescription className="relative mx-auto max-w-2xl text-sm leading-7">
+                CodeDuel is already structured around the collaborative session flow, so you can focus on the interview itself instead of setup overhead.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pb-8">
+              <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+                <Button
+                  size="lg"
+                  className="font-mono uppercase tracking-[0.2em]"
+                  onClick={ctaAction}
+                >
+                  {!loading && user ? "Go to dashboard" : "Get started"}
+                  <ArrowRight className="size-4" />
+                </Button>
+                <Button asChild size="lg" variant="outline" className="font-mono uppercase tracking-[0.18em]">
+                  <a href="#features">See features</a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </RevealSection>
+
+      <footer className="relative z-10 border-t border-border/60 py-8">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 md:flex-row md:px-10">
+          <div className="flex items-center gap-2">
+            <Code2 className="size-4 text-primary" />
+            <span className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              CodeDuel — collaborative interview rooms
+            </span>
+          </div>
+          <span className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            © {new Date().getFullYear()} CodeDuel
+          </span>
+        </div>
+      </footer>
+    </div>
+  );
 }
