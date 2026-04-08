@@ -5,6 +5,7 @@ import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { MonacoBinding } from "y-monaco";
 import type { EditorPresenceUser, PresenceParticipant } from "@/lib/presence";
+import { getCollabWsUrl } from "@/lib/runtime-config";
 
 interface Props {
     sessionId: string;
@@ -56,7 +57,7 @@ export default function Editor({
         if (!isEditorReady) return;
 
         const editor = editorRef.current;
-        const wsUrl = import.meta.env.VITE_COLLAB_WS_URL || "ws://localhost:1234";
+        const wsUrl = getCollabWsUrl();
         if (!editor) return;
         const model = editor.getModel();
         if (!model) return;

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { signOut } from "aws-amplify/auth";
-import Spline from "@splinetool/react-spline";
 import { motion } from "framer-motion";
 import {
   AlertCircle,
@@ -15,7 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import DeferredSplineScene from "@/components/DeferredSplineScene";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,9 +78,7 @@ export default function DashboardPage() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
       <div className="absolute inset-0 z-0 opacity-80">
-        <ErrorBoundary fallback={<div className="absolute inset-0 bg-background" />}>
-          <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
-        </ErrorBoundary>
+        <DeferredSplineScene scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
       </div>
       <div className="surface-grid absolute inset-0 z-0 opacity-20" />
       <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.14),transparent_28%),linear-gradient(180deg,hsl(var(--background)/0.58),hsl(var(--background)/0.92)_75%)]" />

@@ -1,7 +1,6 @@
 import { useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useInView, useScroll, useTransform } from "framer-motion";
-import Spline from "@splinetool/react-spline";
 import {
   ArrowRight,
   ChevronDown,
@@ -16,7 +15,7 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import DeferredSplineScene from "@/components/DeferredSplineScene";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,23 +26,36 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/lib/useAuth";
 
 const CODE_LINES = [
-  { text: "function", className: "text-violet-300" },
-  { text: " twoSum", className: "text-primary" },
-  { text: "(nums, target) {", className: "text-slate-200" },
-  { text: "  const map = ", className: "text-slate-300" },
-  { text: "new", className: "text-violet-300" },
-  { text: " Map();", className: "text-slate-200" },
-  { text: "  for (let i = 0; i < nums.length; i++) {", className: "text-slate-300" },
-  { text: "    const comp = target - nums[i];", className: "text-slate-300" },
-  { text: "    if (map.has(comp)) ", className: "text-slate-300" },
-  { text: "return", className: "text-violet-300" },
-  { text: " [map.get(comp), i];", className: "text-primary" },
-  { text: "    map.set(nums[i], i);", className: "text-slate-300" },
-  { text: "  }", className: "text-slate-500" },
-  { text: "}", className: "text-slate-500" },
+  [
+    { text: "function", className: "text-violet-300" },
+    { text: " twoSum", className: "text-primary" },
+    { text: "(nums, target) {", className: "text-slate-200" },
+  ],
+  [
+    { text: "  const map = ", className: "text-slate-300" },
+    { text: "new", className: "text-violet-300" },
+    { text: " Map();", className: "text-slate-200" },
+  ],
+  [
+    { text: "  for", className: "text-violet-300" },
+    { text: " (let i = 0; i < nums.length; i++) {", className: "text-slate-300" },
+  ],
+  [
+    { text: "    const comp = target - nums[i];", className: "text-slate-300" },
+  ],
+  [
+    { text: "    if", className: "text-violet-300" },
+    { text: " (map.has(comp)) ", className: "text-slate-300" },
+    { text: "return", className: "text-violet-300" },
+    { text: " [map.get(comp), i];", className: "text-primary" },
+  ],
+  [
+    { text: "    map.set(nums[i], i);", className: "text-slate-300" },
+  ],
+  [{ text: "  }", className: "text-slate-500" }],
+  [{ text: "}", className: "text-slate-500" }],
 ];
 
 function AnimatedCodeBlock() {
@@ -59,7 +71,13 @@ function AnimatedCodeBlock() {
           <span className="mr-4 inline-block w-5 text-right text-slate-600">
             {index + 1}
           </span>
-          <span className={line.className}>{line.text}</span>
+          <span className="whitespace-pre">
+            {line.map((segment, segmentIndex) => (
+              <span key={`${index}-${segmentIndex}`} className={segment.className}>
+                {segment.text}
+              </span>
+            ))}
+          </span>
           {index === CODE_LINES.length - 1 ? (
             <span className="ml-1 inline-block h-4 w-[7px] animate-pulse rounded-sm bg-primary align-middle" />
           ) : null}
@@ -170,14 +188,13 @@ function StepCard({
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
   const heroRef = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll();
   const heroOpacity = useTransform(scrollYProgress, [0, 0.15], [1, 0]);
   const heroScale = useTransform(scrollYProgress, [0, 0.15], [1, 0.96]);
 
   const ctaAction = () => {
-    navigate(!loading && user ? "/dashboard" : "/login");
+    navigate("/dashboard");
   };
 
   return (
@@ -206,7 +223,7 @@ export default function LandingPage() {
               <a href="#how-it-works">How it works</a>
             </Button>
             <Button className="font-mono text-xs uppercase tracking-[0.2em]" onClick={ctaAction}>
-              {!loading && user ? "Dashboard" : "Get started"}
+              Get started
             </Button>
           </div>
         </div>
@@ -218,9 +235,7 @@ export default function LandingPage() {
         className="relative flex min-h-screen items-center justify-center pt-16"
       >
         <div className="absolute inset-0 z-0">
-          <ErrorBoundary fallback={<div className="absolute inset-0 bg-background" />}>
-            <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
-          </ErrorBoundary>
+          <DeferredSplineScene scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
         </div>
         <div className="surface-grid absolute inset-0 z-[1] opacity-20" />
         <div className="absolute inset-0 z-[1] bg-gradient-to-b from-background/35 via-background/55 to-background" />
@@ -331,7 +346,7 @@ export default function LandingPage() {
         </motion.div>
       </motion.div>
 
-      <RevealSection id="features" className="relative z-10 py-24 md:py-30">
+      <RevealSection id="features" className="relative z-10 scroll-mt-24 py-24 md:py-30">
         <div className="mx-auto max-w-7xl px-6 md:px-10">
           <div className="mx-auto mb-14 max-w-2xl text-center">
             <Badge className="mb-4 font-mono" variant="outline">
@@ -393,7 +408,7 @@ export default function LandingPage() {
         </div>
       </RevealSection>
 
-      <RevealSection id="how-it-works" className="relative z-10 py-24 md:py-30">
+      <RevealSection id="how-it-works" className="relative z-10 scroll-mt-24 py-24 md:py-30">
         <div className="mx-auto max-w-6xl px-6 md:px-10">
           <div className="mx-auto mb-14 max-w-2xl text-center">
             <Badge className="mb-4 font-mono" variant="default">
@@ -456,7 +471,7 @@ export default function LandingPage() {
                   className="font-mono uppercase tracking-[0.2em]"
                   onClick={ctaAction}
                 >
-                  {!loading && user ? "Go to dashboard" : "Get started"}
+                  Get started
                   <ArrowRight className="size-4" />
                 </Button>
                 <Button asChild size="lg" variant="outline" className="font-mono uppercase tracking-[0.18em]">

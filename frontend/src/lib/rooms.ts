@@ -1,4 +1,5 @@
 import { fetchAuthSession } from "aws-amplify/auth";
+import { getCollabHttpBaseUrl } from "./runtime-config";
 
 const ROOM_GRANT_STORAGE_PREFIX = "codeduel.room-grant.";
 
@@ -19,21 +20,6 @@ function normalizeRoomId(rawRoomId: string) {
   }
 
   return normalized;
-}
-
-function getCollabHttpBaseUrl() {
-  const configuredHttpUrl = import.meta.env.VITE_COLLAB_HTTP_URL?.trim();
-  if (configuredHttpUrl) {
-    return configuredHttpUrl.replace(/\/$/, "");
-  }
-
-  const wsUrl = import.meta.env.VITE_COLLAB_WS_URL || "ws://localhost:1234";
-  const url = new URL(wsUrl);
-  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-  url.pathname = "";
-  url.search = "";
-  url.hash = "";
-  return url.toString().replace(/\/$/, "");
 }
 
 async function getBearerToken() {

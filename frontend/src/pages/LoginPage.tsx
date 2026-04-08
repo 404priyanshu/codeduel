@@ -6,7 +6,6 @@ import {
   signUp,
 } from "aws-amplify/auth";
 import { Navigate, useNavigate } from "react-router-dom";
-import Spline from "@splinetool/react-spline";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
@@ -17,7 +16,7 @@ import {
   Lock,
   Mail,
 } from "lucide-react";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import DeferredSplineScene from "@/components/DeferredSplineScene";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +29,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { googleAuthEnabled } from "@/lib/auth";
+import { isGoogleAuthEnabled } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
 
 type Mode = "login" | "signup" | "confirm";
@@ -79,6 +78,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+  const googleAuthEnabled = isGoogleAuthEnabled();
 
   if (authLoading) return null;
   if (user) return <Navigate to="/dashboard" replace />;
@@ -145,9 +145,7 @@ export default function LoginPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-6 py-10">
       <div className="absolute inset-0 z-0">
-        <ErrorBoundary fallback={<div className="absolute inset-0 bg-background" />}>
-          <Spline scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
-        </ErrorBoundary>
+        <DeferredSplineScene scene="https://prod.spline.design/6Wq1Q7YGyM-iab9i/scene.splinecode" />
       </div>
       <div className="surface-grid absolute inset-0 z-0 opacity-25" />
       <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.12),transparent_28%),linear-gradient(180deg,hsl(var(--background)/0.2),hsl(var(--background)/0.92)_72%)]" />

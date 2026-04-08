@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   AlertCircle,
@@ -9,7 +9,6 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import Editor from "@/components/Editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +40,8 @@ import {
   type RoomGrant,
 } from "@/lib/rooms";
 import { useAuth } from "@/lib/useAuth";
+
+const Editor = lazy(() => import("@/components/Editor"));
 
 const LANGUAGES = [
   { label: "JavaScript", value: "javascript" },
@@ -346,15 +347,37 @@ export default function SessionPage() {
             </Card>
           </div>
         ) : activeRoomGrant ? (
-          <Editor
-            currentUser={currentPresenceUser}
-            sessionId={normalizedRoomId}
-            roomAccessToken={activeRoomGrant.roomAccessToken}
-            language={language}
-            onConnectionChange={handleConnectionChange}
-            onLanguageChange={handleLanguageChange}
-            onPresenceChange={handlePresenceChange}
-          />
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center p-6">
+                <Card className="glass-panel w-full max-w-lg border-border/80">
+                  <CardHeader className="items-center text-center">
+                    <Badge className="font-mono" variant="outline">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Loading editor
+                    </Badge>
+                    <CardTitle className="font-mono text-2xl uppercase">
+                      Preparing Monaco
+                    </CardTitle>
+                    <CardDescription className="max-w-md text-sm leading-7">
+                      The collaborative editor is loading separately so the rest
+                      of the app stays faster to open.
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              </div>
+            }
+          >
+            <Editor
+              currentUser={currentPresenceUser}
+              sessionId={normalizedRoomId}
+              roomAccessToken={activeRoomGrant.roomAccessToken}
+              language={language}
+              onConnectionChange={handleConnectionChange}
+              onLanguageChange={handleLanguageChange}
+              onPresenceChange={handlePresenceChange}
+            />
+          </Suspense>
         ) : null}
       </div>
 

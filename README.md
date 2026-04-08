@@ -58,11 +58,14 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-The default `.env.example` points the editor at the local collaboration server:
+The default `.env.example` provides local fallback values:
 
 ```bash
 VITE_COLLAB_WS_URL=ws://localhost:1234
 ```
+
+The frontend now also ships with a runtime config file at `frontend/public/runtime-config.js`.
+That file is loaded by the browser before the app starts, so deployment-specific values can be changed without rebuilding the frontend bundle.
 
 ## Production collab server
 
@@ -111,9 +114,45 @@ Current scaling note:
 - one instance works well with local or mounted persistence
 - multiple instances still require sticky sessions or shared persistence/pub-sub to keep room state consistent
 
+## Frontend runtime config
+
+The frontend now supports runtime-loaded configuration through `frontend/public/runtime-config.js`.
+
+This is the preferred deployment path because it lets you:
+
+- build the frontend once
+- deploy the same static assets to multiple environments
+- change collab-server and Cognito values without rebuilding
+
+Runtime config keys:
+
+- `collabWsUrl`
+- `collabHttpUrl`
+- `userPoolId`
+- `userPoolClientId`
+- `cognitoDomain`
+- `authRedirectSignIn`
+- `authRedirectSignOut`
+
+Example production runtime config:
+
+```js
+window.__CODEDUEL_CONFIG__ = {
+  collabWsUrl: "wss://collab.yourdomain.com",
+  collabHttpUrl: "https://collab.yourdomain.com",
+  userPoolId: "us-east-1_example",
+  userPoolClientId: "exampleclientid",
+  cognitoDomain: "your-domain.auth.us-east-1.amazoncognito.com",
+  authRedirectSignIn: ["https://app.yourdomain.com/login"],
+  authRedirectSignOut: ["https://app.yourdomain.com/"],
+};
+```
+
+For local development, Vite env values in `frontend/.env.local` still work as a fallback.
+
 ## Custom auth and Google sign-in
 
-If you want to use your own Cognito setup instead of the default local values, set the frontend variables in `frontend/.env.local`:
+If you want to use your own Cognito setup locally, set the frontend fallback values in `frontend/.env.local`:
 
 ```bash
 VITE_USER_POOL_ID=

@@ -58,6 +58,10 @@
     min-height: 100vh;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     margin: 0;
     overflow-x: hidden;
@@ -75,6 +79,14 @@
   select,
   textarea {
     font: inherit;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @layer base {
+    html {
+      scroll-behavior: auto;
+    }
   }
 }
 

@@ -128,7 +128,7 @@ Key files:
 
 This file configures Amplify Auth for the frontend.
 
-It supports these frontend environment variables:
+It supports these frontend fallback environment variables:
 
 | Variable | Purpose |
 |---|---|
@@ -140,17 +140,19 @@ It supports these frontend environment variables:
 
 Important implementation detail:
 
-- The file includes default hardcoded Cognito values
-- If local env overrides are not supplied, the app still boots against those defaults
+- The frontend now prefers a browser-loaded runtime config file at `frontend/public/runtime-config.js`
+- Vite env values remain as a local fallback path for development
+- The file still includes default Cognito values so a fresh clone can boot locally
 
 Why this exists:
 
 - It reduces local setup friction
+- It allows static frontend assets to be deployed once and reconfigured per environment without rebuilding
 - It allows the project to run immediately without forcing every developer to deploy infrastructure first
 
 Tradeoff:
 
-- Default hardcoded auth targets are convenient for development, but they are less explicit than a purely env-driven configuration
+- Default auth targets are convenient for development, but they are less explicit than a fully locked-down production config
 
 #### `useAuth.ts`
 
@@ -257,6 +259,7 @@ Why this exists:
 - it keeps room authorization server-backed
 - it lets the editor websocket connect with a short-lived signed room token
 - it avoids pushing Cognito verification logic down into the editor component itself
+- it allows the frontend to derive HTTP and websocket endpoints from runtime config instead of build-time-only values
 
 ### 5.5 Collaborative editor subsystem
 
