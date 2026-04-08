@@ -1,11 +1,38 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Code2, Wifi, WifiOff } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  AlertCircle,
+  Code2,
+  Loader2,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import Editor from "@/components/Editor";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  joinRoom,
+  normalizeRoomId,
+  persistRoomGrant,
+  readRoomGrant,
+  type RoomGrant,
+} from "@/lib/rooms";
 
 const LANGUAGES = [
   { label: "JavaScript", value: "javascript" },
@@ -15,17 +42,101 @@ const LANGUAGES = [
   { label: "C++", value: "cpp" },
 ];
 
+interface SessionLocationState {
+  roomGrant?: RoomGrant;
+}
+
 export default function SessionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [language, setLanguage] = useState("javascript");
   const [connected, setConnected] = useState(false);
+  const [roomGrant, setRoomGrant] = useState<RoomGrant | null>(null);
+  const [authorizing, setAuthorizing] = useState(false);
+  const [authorizationError, setAuthorizationError] = useState("");
+
+  const normalizedRoomId = useMemo(() => {
+    if (!id) return null;
+
+    try {
+      return normalizeRoomId(id);
+    } catch {
+      return null;
+    }
+  }, [id]);
+
+  const locationRoomGrant = useMemo(() => {
+    const locationState = location.state as SessionLocationState | null;
+    if (locationState?.roomGrant?.roomId === normalizedRoomId) {
+      return locationState.roomGrant;
+    }
+
+    return null;
+  }, [location.state, normalizedRoomId]);
+
+  const cachedRoomGrant = useMemo(() => {
+    if (!normalizedRoomId) {
+      return null;
+    }
+
+    return readRoomGrant(normalizedRoomId);
+  }, [normalizedRoomId]);
+
+  const activeRoomGrant =
+    roomGrant?.roomId === normalizedRoomId
+      ? roomGrant
+      : locationRoomGrant ?? cachedRoomGrant;
+  const isAuthorizing =
+    !activeRoomGrant &&
+    !authorizationError &&
+    (authorizing || Boolean(normalizedRoomId));
 
   useEffect(() => {
-    if (!id) {
+    if (!normalizedRoomId) {
       navigate("/dashboard");
+      return;
     }
-  }, [id, navigate]);
+
+    if (locationRoomGrant) {
+      persistRoomGrant(locationRoomGrant);
+      return;
+    }
+
+    if (cachedRoomGrant || activeRoomGrant) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      setAuthorizing(true);
+      setAuthorizationError("");
+
+      try {
+        const nextGrant = await joinRoom(normalizedRoomId);
+        if (cancelled) return;
+        setRoomGrant(nextGrant);
+        setAuthorizationError("");
+      } catch (error) {
+        if (cancelled) return;
+        setRoomGrant(null);
+        setAuthorizationError(
+          error instanceof Error
+            ? error.message
+            : "Unable to authorize access to this room."
+        );
+      } finally {
+        if (!cancelled) {
+          setAuthorizing(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRoomGrant, cachedRoomGrant, locationRoomGrant, navigate, normalizedRoomId]);
 
   const handleConnectionChange = useCallback((isConnected: boolean) => {
     setConnected(isConnected);
@@ -37,7 +148,9 @@ export default function SessionPage() {
     );
   }, []);
 
-  if (!id) return null;
+  if (!normalizedRoomId) {
+    return null;
+  }
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background">
@@ -58,13 +171,19 @@ export default function SessionPage() {
               <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
                 Session
               </div>
-              <div className="truncate font-mono text-sm text-foreground/90">{id}</div>
+              <div className="truncate font-mono text-sm text-foreground/90">
+                {normalizedRoomId}
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="w-40">
-              <Select value={language} onValueChange={handleLanguageChange}>
+              <Select
+                value={language}
+                onValueChange={handleLanguageChange}
+                disabled={isAuthorizing || !activeRoomGrant}
+              >
                 <SelectTrigger className="h-10 font-mono text-xs uppercase tracking-[0.18em]">
                   <SelectValue placeholder="Language" />
                 </SelectTrigger>
@@ -82,32 +201,103 @@ export default function SessionPage() {
               </Select>
             </div>
 
-            <Badge className="font-mono" variant={connected ? "success" : "outline"}>
-              {connected ? (
+            <Badge
+              className="font-mono"
+              variant={isAuthorizing ? "outline" : connected ? "success" : "outline"}
+            >
+              {isAuthorizing ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : connected ? (
                 <Wifi className="size-3.5" />
               ) : (
                 <WifiOff className="size-3.5" />
               )}
-              {connected ? "Live" : "Connecting"}
+              {isAuthorizing ? "Authorizing" : connected ? "Live" : "Connecting"}
             </Badge>
           </div>
         </div>
       </header>
 
       <div className="flex-1 bg-[linear-gradient(180deg,hsl(var(--background)),hsl(224_47%_5%))]">
-        <Editor
-          sessionId={id}
-          language={language}
-          onConnectionChange={handleConnectionChange}
-          onLanguageChange={handleLanguageChange}
-        />
+        {isAuthorizing ? (
+          <div className="flex h-full items-center justify-center p-6">
+            <Card className="glass-panel w-full max-w-lg border-border/80">
+              <CardHeader className="items-center text-center">
+                <Badge className="font-mono" variant="outline">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Authorizing room
+                </Badge>
+                <CardTitle className="font-mono text-2xl uppercase">
+                  Validating access
+                </CardTitle>
+                <CardDescription className="max-w-md text-sm leading-7">
+                  The collaboration server is verifying your room membership and
+                  issuing a signed room access token before the editor connects.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+        ) : authorizationError ? (
+          <div className="flex h-full items-center justify-center p-6">
+            <Card className="glass-panel w-full max-w-xl border-border/80">
+              <CardHeader className="space-y-4">
+                <Badge className="w-fit font-mono" variant="outline">
+                  Room access failed
+                </Badge>
+                <div className="space-y-2">
+                  <CardTitle className="font-mono text-2xl uppercase">
+                    We could not authorize this room.
+                  </CardTitle>
+                  <CardDescription className="text-sm leading-7">
+                    This room may not exist anymore, may have expired, or your
+                    session could not be verified by the collaboration server.
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <Alert variant="destructive">
+                  <AlertDescription className="flex items-start gap-3 font-mono text-xs">
+                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                    <span>{authorizationError}</span>
+                  </AlertDescription>
+                </Alert>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    className="font-mono uppercase tracking-[0.18em]"
+                    onClick={() => navigate("/dashboard")}
+                  >
+                    Back to dashboard
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="font-mono uppercase tracking-[0.18em]"
+                    onClick={() => window.location.reload()}
+                  >
+                    Retry authorization
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : activeRoomGrant ? (
+          <Editor
+            sessionId={normalizedRoomId}
+            roomAccessToken={activeRoomGrant.roomAccessToken}
+            language={language}
+            onConnectionChange={handleConnectionChange}
+            onLanguageChange={handleLanguageChange}
+          />
+        ) : null}
       </div>
 
       <footer className="border-t border-border/70 bg-card/55 px-4 py-2 md:px-6">
         <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-          {connected
-            ? "Connected. Editor and language changes sync in real time."
-            : "Reconnecting to collaboration server."}
+          {isAuthorizing
+            ? "Waiting for server-backed room authorization."
+            : connected
+              ? "Connected. Editor and language changes sync in real time."
+              : "Room authorized. Connecting to collaboration server."}
         </span>
       </footer>
     </div>

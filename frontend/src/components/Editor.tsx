@@ -7,6 +7,7 @@ import { MonacoBinding } from "y-monaco";
 
 interface Props {
     sessionId: string;
+    roomAccessToken: string;
     language?: string;
     onConnectionChange?: (connected: boolean) => void;
     onLanguageChange?: (language: string) => void;
@@ -14,6 +15,7 @@ interface Props {
 
 export default function Editor({
     sessionId,
+    roomAccessToken,
     language = "javascript",
     onConnectionChange,
     onLanguageChange,
@@ -55,6 +57,9 @@ export default function Editor({
         const sessionState = doc.getMap<string>("session");
         const provider = new WebsocketProvider(wsUrl, sessionId, doc, {
             maxBackoffTime: 1500,
+            params: {
+                roomAccessToken,
+            },
             resyncInterval: 5000,
         });
         const binding = new MonacoBinding(yText, model, new Set([editor]));
@@ -146,7 +151,7 @@ export default function Editor({
             sessionStateRef.current = null;
             onConnectionChange?.(false);
         };
-    }, [isEditorReady, sessionId, onConnectionChange]);
+    }, [isEditorReady, onConnectionChange, roomAccessToken, sessionId]);
 
     useEffect(() => {
         const editor = editorRef.current;

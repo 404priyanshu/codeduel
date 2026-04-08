@@ -3,9 +3,11 @@ import { signOut } from "aws-amplify/auth";
 import Spline from "@splinetool/react-spline";
 import { motion } from "framer-motion";
 import {
+  AlertCircle,
   ArrowRight,
   Code2,
   Copy,
+  Loader2,
   LogOut,
   MonitorPlay,
   Play,
@@ -14,6 +16,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,23 +29,46 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/useAuth";
-
-function generateSessionId() {
-  return Math.random().toString(36).substring(2, 10).toUpperCase();
-}
+import { createRoom, joinRoom } from "@/lib/rooms";
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [joinCode, setJoinCode] = useState("");
+  const [pendingAction, setPendingAction] = useState<"create" | "join" | null>(null);
+  const [roomError, setRoomError] = useState("");
 
-  const handleCreate = () => {
-    navigate(`/session/${generateSessionId()}`);
+  const handleCreate = async () => {
+    setPendingAction("create");
+    setRoomError("");
+
+    try {
+      const roomGrant = await createRoom();
+      navigate(`/session/${roomGrant.roomId}`, { state: { roomGrant } });
+    } catch (error) {
+      setRoomError(
+        error instanceof Error ? error.message : "Unable to create room."
+      );
+    } finally {
+      setPendingAction(null);
+    }
   };
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (!joinCode.trim()) return;
-    navigate(`/session/${joinCode.trim().toUpperCase()}`);
+    setPendingAction("join");
+    setRoomError("");
+
+    try {
+      const roomGrant = await joinRoom(joinCode);
+      navigate(`/session/${roomGrant.roomId}`, { state: { roomGrant } });
+    } catch (error) {
+      setRoomError(
+        error instanceof Error ? error.message : "Unable to join room."
+      );
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const handleSignOut = async () => {
@@ -111,6 +137,14 @@ export default function DashboardPage() {
             into an existing room with a shared code. The underlying editor stays
             synced in real time through the collaboration server.
           </p>
+          {roomError ? (
+            <Alert variant="destructive" className="mt-6 max-w-2xl">
+              <AlertDescription className="flex items-start gap-3 font-mono text-xs">
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span>{roomError}</span>
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </motion.section>
 
         <motion.section
@@ -155,10 +189,15 @@ export default function DashboardPage() {
               <Button
                 size="lg"
                 className="w-full font-mono uppercase tracking-[0.2em]"
+                disabled={pendingAction !== null}
                 onClick={handleCreate}
               >
-                <Play className="size-4 fill-current" />
-                Start new room
+                {pendingAction === "create" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Play className="size-4 fill-current" />
+                )}
+                {pendingAction === "create" ? "Creating room" : "Start new room"}
               </Button>
             </CardContent>
           </Card>
@@ -205,7 +244,7 @@ export default function DashboardPage() {
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
-                        handleJoin();
+                        void handleJoin();
                       }
                     }}
                     className="h-12 pl-10 font-mono tracking-[0.3em] uppercase"
@@ -218,12 +257,18 @@ export default function DashboardPage() {
                 size="lg"
                 variant="secondary"
                 className="w-full bg-violet-500/90 font-mono uppercase tracking-[0.2em] text-white hover:bg-violet-400"
-                onClick={handleJoin}
-                disabled={!joinCode.trim()}
+                onClick={() => {
+                  void handleJoin();
+                }}
+                disabled={!joinCode.trim() || pendingAction !== null}
               >
-                <Copy className="size-4" />
-                Connect to room
-                <ArrowRight className="size-4" />
+                {pendingAction === "join" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Copy className="size-4" />
+                )}
+                {pendingAction === "join" ? "Joining room" : "Connect to room"}
+                {pendingAction === "join" ? null : <ArrowRight className="size-4" />}
               </Button>
             </CardContent>
           </Card>

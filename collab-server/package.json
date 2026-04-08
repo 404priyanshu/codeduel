@@ -9,6 +9,7 @@
     "start:persist": "HOST=0.0.0.0 PORT=1234 node server.js"
   },
   "dependencies": {
+    "jose": "^6.2.2",
     "lib0": "0.2.117",
     "ws": "8.20.0",
     "y-protocols": "1.0.7",
