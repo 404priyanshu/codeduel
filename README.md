@@ -10,7 +10,7 @@ CodeDuel is a room-based collaborative coding app for technical interviews and p
 - Server-backed room creation, join authorization, and signed room access tokens
 - Shared Monaco editor powered by Yjs CRDT sync
 - Synchronized language selection across connected editors
-- Dedicated collaboration server with reconnect handling, persistence, and health checks
+- Dedicated collaboration server with reconnect handling, persistence, health/readiness probes, and collaboration presence
 
 ## Repository layout
 
@@ -64,6 +64,53 @@ The default `.env.example` points the editor at the local collaboration server:
 VITE_COLLAB_WS_URL=ws://localhost:1234
 ```
 
+## Production collab server
+
+The collaboration server is ready for single-instance production deployments. It now includes:
+
+- explicit room-token secret validation in production
+- origin allowlists for HTTP and websocket traffic
+- graceful shutdown and readiness draining
+- periodic expired-room cleanup
+- container packaging for deployment
+
+Use the collab server env template as your starting point:
+
+```bash
+cd collab-server
+cp .env.example .env
+```
+
+Important production settings:
+
+- `NODE_ENV=production`
+- `ROOM_TOKEN_SECRET` set to a long random secret
+- `CORS_ALLOW_ORIGINS` set to your exact frontend origin or origins
+- `COGNITO_USER_POOL_ID` and `COGNITO_USER_POOL_CLIENT_ID` matching the frontend
+- `YDOCS_DIR` backed by durable storage if you want room recovery across restarts
+
+### Docker example
+
+```bash
+cd collab-server
+docker build -t codeduel-collab-server .
+docker run --rm \
+  -p 1234:1234 \
+  --env-file .env \
+  -v "$(pwd)/data:/data" \
+  codeduel-collab-server
+```
+
+The container exposes:
+
+- `GET /healthz` for liveness
+- `GET /readyz` for readiness and draining during shutdown
+
+Current scaling note:
+
+- one instance works well with local or mounted persistence
+- multiple instances still require sticky sessions or shared persistence/pub-sub to keep room state consistent
+
 ## Custom auth and Google sign-in
 
 If you want to use your own Cognito setup instead of the default local values, set the frontend variables in `frontend/.env.local`:
@@ -82,6 +129,10 @@ If you use custom Cognito values, give the same pool/client to the collaboration
 cd collab-server
 COGNITO_USER_POOL_ID=your-user-pool-id \
 COGNITO_USER_POOL_CLIENT_ID=your-user-pool-client-id \
+NODE_ENV=production \
+HOST=0.0.0.0 \
+PORT=1234 \
+CORS_ALLOW_ORIGINS=https://your-frontend.example.com \
 ROOM_TOKEN_SECRET=replace-this-in-production \
 npm start
 ```

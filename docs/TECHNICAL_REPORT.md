@@ -24,6 +24,8 @@ CodeDuel is currently an authenticated collaborative coding application built ar
 - Shared Monaco editor backed by Yjs CRDT synchronization
 - Shared language selection across connected clients
 - Room persistence through file-based Yjs document snapshots
+- Presence indicators and shared awareness data inside the editor session
+- Single-instance production packaging for the collab server
 - Basic connection status feedback in the session UI
 
 ### What is present in the repo as vision, marketing, or scaffolding
@@ -32,7 +34,7 @@ CodeDuel is currently an authenticated collaborative coding application built ar
 - Video chat
 - Problem bank management
 - Interview analytics
-- Production-grade multiplayer backend beyond the single Yjs websocket node
+- Multi-node collaboration beyond the current single Yjs websocket node
 - Redis, S3, ECS Fargate, and similar platform pieces mentioned in product-facing copy
 
 These broader features are not yet wired into the runtime application shown in the current codebase. Some are reflected in earlier README text and product messaging, but not in active implementation.
@@ -346,12 +348,15 @@ The server:
 - issues signed room access tokens
 - accepts websocket room connections
 - authorizes websocket upgrades against room grants
+- enforces configured browser origins
 - loads or creates a Yjs document for that room
 - seeds starter text for brand-new rooms
 - relays Yjs sync protocol messages
 - relays Yjs awareness messages
 - persists document snapshots to disk
+- periodically prunes expired room metadata
 - exposes health and readiness endpoints
+- drains cleanly during shutdown and restarts
 - removes rooms from memory when the last client leaves
 
 ### 6.2 Runtime and transport
@@ -443,8 +448,8 @@ Why this design works:
 
 Tradeoff:
 
-- Persistence is local to one server instance
-- Horizontal scaling needs sticky sessions or shared storage/pub-sub
+- Persistence is local to one server instance unless the deployment mounts durable shared storage
+- Horizontal scaling still needs sticky sessions or shared storage/pub-sub
 
 The server also persists room metadata in a JSON file under the same data directory so room membership survives restarts on a single instance.
 
@@ -462,6 +467,8 @@ Both return JSON including:
 - room count
 - connection count
 - whether persistence is enabled
+- uptime
+- shutdown state
 
 This is useful for:
 
@@ -476,6 +483,9 @@ The server includes:
 - ping/pong heartbeat handling
 - max payload enforcement
 - disabled websocket compression
+- origin allowlist checks for browser traffic
+- periodic room sweeps for expired metadata
+- graceful shutdown with websocket draining and final persistence flush
 - cleanup when clients disconnect
 
 Why these matter:
@@ -492,7 +502,9 @@ Why these matter:
 | `PORT` | Server port | `1234` |
 | `COGNITO_USER_POOL_ID` | User pool used to verify room API tokens | built-in local default |
 | `COGNITO_USER_POOL_CLIENT_ID` | User pool client used to verify room API tokens | built-in local default |
-| `ROOM_TOKEN_SECRET` | HMAC secret for signed room access tokens | dev fallback |
+| `ROOM_TOKEN_SECRET` | HMAC secret for signed room access tokens | dev fallback locally, required explicitly in production |
+| `CORS_ALLOW_ORIGINS` | Comma-separated allowed browser origins | `*` in development |
+| `CORS_ALLOW_ORIGIN` | Backward-compatible single-origin alias | unset |
 | `DISABLE_PERSISTENCE` | Skip disk snapshots | off |
 | `YDOCS_DIR` | Snapshot directory | `./data` |
 | `PERSISTENCE_FLUSH_DEBOUNCE_MS` | Debounced save interval | `750` |
@@ -500,6 +512,36 @@ Why these matter:
 | `MAX_PAYLOAD_BYTES` | Websocket frame size cap | `16MB` |
 | `GC` | Enable Yjs garbage collection | on |
 | `PING_TIMEOUT_MS` | Heartbeat interval | `30000` |
+| `ROOM_SWEEP_INTERVAL_MS` | Interval for pruning expired room metadata | `60000` |
+| `SHUTDOWN_GRACE_MS` | Maximum graceful shutdown drain window | `15000` |
+
+### 6.10 Production deployment model
+
+The collaboration server is now suitable for a straightforward single-instance production deployment.
+
+What was added for that:
+
+- runtime config validation that fails closed in production if secrets or origins are unsafe
+- explicit origin allowlists for HTTP and websocket requests
+- graceful readiness draining on shutdown
+- container packaging through `collab-server/Dockerfile`
+- an env template in `collab-server/.env.example`
+
+The intended deployment model today is:
+
+1. run one Node container or VM instance of `collab-server`
+2. terminate TLS at a reverse proxy or load balancer in front of it
+3. set `CORS_ALLOW_ORIGINS` to the exact frontend HTTPS origin
+4. mount `YDOCS_DIR` to durable storage if you want recovery after restarts
+5. use `/healthz` for liveness and `/readyz` for readiness
+
+This is productionizable, but it is still not a horizontally shared collaboration fabric.
+
+If you scale beyond one instance, you still need one of these strategies:
+
+- sticky sessions so each room stays on one node
+- shared persistence plus a pub/sub fanout layer for Yjs updates
+- a different centralized collaboration transport
 
 ## 7. AWS infrastructure architecture
 

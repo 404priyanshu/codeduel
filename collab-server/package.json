@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "HOST=0.0.0.0 PORT=1234 node server.js",
-    "start:memory": "HOST=0.0.0.0 PORT=1234 DISABLE_PERSISTENCE=1 node server.js",
-    "start:persist": "HOST=0.0.0.0 PORT=1234 node server.js"
+    "start": "node server.js",
+    "start:memory": "DISABLE_PERSISTENCE=1 node server.js",
+    "start:persist": "node server.js",
+    "start:prod": "NODE_ENV=production node server.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "jose": "^6.2.2",

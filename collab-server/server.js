@@ -22,8 +22,37 @@ import * as encoding from "lib0/encoding";
 import { verifyCognitoAuthorizationHeader } from "./cognito.js";
 import { signRoomAccessToken, verifyRoomAccessToken } from "./room-tokens.js";
 
+function parseIntegerEnv(name, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = parseInt(process.env[name] || `${fallback}`, 10);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    throw new Error(
+      `Environment variable ${name} must be an integer between ${min} and ${max}.`
+    );
+  }
+
+  return parsed;
+}
+
+function parseAllowedOrigins(rawValue) {
+  const values = `${rawValue || ""}`
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (values.includes("*") && values.length > 1) {
+    throw new Error(
+      "Allowed origins cannot combine '*' with explicit origins."
+    );
+  }
+
+  return new Set(values);
+}
+
+const NODE_ENV = process.env.NODE_ENV || "development";
+const IS_PRODUCTION = NODE_ENV === "production";
+const DEFAULT_ROOM_TOKEN_SECRET = "codeduel-dev-room-secret-change-me";
 const HOST = process.env.HOST || "0.0.0.0";
-const PORT = parseInt(process.env.PORT || "1234", 10);
+const PORT = parseIntegerEnv("PORT", 1234, { min: 1, max: 65535 });
 const SERVER_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DISABLE_PERSISTENCE = /^(1|true|yes)$/i.test(
   process.env.DISABLE_PERSISTENCE || ""
@@ -32,30 +61,51 @@ const PERSISTENCE_DIR = path.resolve(
   SERVER_ROOT,
   process.env.YDOCS_DIR || "./data"
 );
-const PERSISTENCE_FLUSH_DEBOUNCE_MS = parseInt(
-  process.env.PERSISTENCE_FLUSH_DEBOUNCE_MS || "750",
-  10
+const PERSISTENCE_FLUSH_DEBOUNCE_MS = parseIntegerEnv(
+  "PERSISTENCE_FLUSH_DEBOUNCE_MS",
+  750,
+  { min: 50 }
 );
 const DEFAULT_DOCUMENT_TEXT =
   process.env.CODEDUEL_EDITOR_TEMPLATE || "// Start coding here\n";
-const MAX_PAYLOAD_BYTES = parseInt(
-  process.env.MAX_PAYLOAD_BYTES || `${16 * 1024 * 1024}`,
-  10
+const MAX_PAYLOAD_BYTES = parseIntegerEnv(
+  "MAX_PAYLOAD_BYTES",
+  16 * 1024 * 1024,
+  { min: 1024 }
 );
 const GC_ENABLED = !/^(0|false)$/i.test(process.env.GC || "");
-const PING_TIMEOUT_MS = parseInt(process.env.PING_TIMEOUT_MS || "30000", 10);
-const ROOM_TTL_MS = parseInt(
-  process.env.ROOM_TTL_MS || `${24 * 60 * 60 * 1000}`,
-  10
+const PING_TIMEOUT_MS = parseIntegerEnv("PING_TIMEOUT_MS", 30000, {
+  min: 1000,
+});
+const ROOM_TTL_MS = parseIntegerEnv(
+  "ROOM_TTL_MS",
+  24 * 60 * 60 * 1000,
+  { min: 60_000 }
 );
-const ROOM_ACCESS_TOKEN_TTL_MS = parseInt(
-  process.env.ROOM_ACCESS_TOKEN_TTL_MS || `${12 * 60 * 60 * 1000}`,
-  10
+const ROOM_ACCESS_TOKEN_TTL_MS = parseIntegerEnv(
+  "ROOM_ACCESS_TOKEN_TTL_MS",
+  12 * 60 * 60 * 1000,
+  { min: 60_000 }
 );
+const ROOM_SWEEP_INTERVAL_MS = parseIntegerEnv(
+  "ROOM_SWEEP_INTERVAL_MS",
+  60_000,
+  { min: 5_000 }
+);
+const SHUTDOWN_GRACE_MS = parseIntegerEnv("SHUTDOWN_GRACE_MS", 15_000, {
+  min: 1_000,
+});
 const ROOM_TOKEN_SECRET =
-  process.env.ROOM_TOKEN_SECRET || "codeduel-dev-room-secret-change-me";
-const ROOM_ID_LENGTH = parseInt(process.env.ROOM_ID_LENGTH || "8", 10);
-const CORS_ALLOW_ORIGIN = process.env.CORS_ALLOW_ORIGIN || "*";
+  process.env.ROOM_TOKEN_SECRET || DEFAULT_ROOM_TOKEN_SECRET;
+const ROOM_ID_LENGTH = parseIntegerEnv("ROOM_ID_LENGTH", 8, {
+  min: 4,
+  max: 16,
+});
+const ALLOWED_ORIGINS = parseAllowedOrigins(
+  process.env.CORS_ALLOW_ORIGINS ??
+    process.env.CORS_ALLOW_ORIGIN ??
+    (IS_PRODUCTION ? "" : "*")
+);
 const ROOM_ID_PATTERN = new RegExp(`^[A-Z0-9]{${ROOM_ID_LENGTH}}$`);
 const ROOM_ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOMS_FILE_PATH = path.join(PERSISTENCE_DIR, "_rooms.json");
@@ -64,9 +114,63 @@ const docs = new Map();
 const roomStore = new Map();
 const flushTimers = new Map();
 let roomsFlushTimer = null;
+let isShuttingDown = false;
+let shutdownPromise = null;
+const startedAt = Date.now();
 
 const messageSync = 0;
 const messageAwareness = 1;
+
+function assertRuntimeConfig() {
+  if (ROOM_ACCESS_TOKEN_TTL_MS > ROOM_TTL_MS) {
+    throw new Error(
+      "ROOM_ACCESS_TOKEN_TTL_MS must be less than or equal to ROOM_TTL_MS."
+    );
+  }
+
+  if (!IS_PRODUCTION) {
+    return;
+  }
+
+  if (ROOM_TOKEN_SECRET === DEFAULT_ROOM_TOKEN_SECRET) {
+    throw new Error("ROOM_TOKEN_SECRET must be set explicitly in production.");
+  }
+
+  if (ROOM_TOKEN_SECRET.length < 32) {
+    throw new Error(
+      "ROOM_TOKEN_SECRET must be at least 32 characters long in production."
+    );
+  }
+
+  if (ALLOWED_ORIGINS.size === 0 || ALLOWED_ORIGINS.has("*")) {
+    throw new Error(
+      "CORS_ALLOW_ORIGINS must list one or more explicit origins in production."
+    );
+  }
+}
+
+function logRuntimeWarnings() {
+  if (ROOM_TOKEN_SECRET === DEFAULT_ROOM_TOKEN_SECRET) {
+    console.warn(
+      "Using the built-in ROOM_TOKEN_SECRET. Set ROOM_TOKEN_SECRET before exposing this server outside local development."
+    );
+  }
+
+  if (ALLOWED_ORIGINS.has("*")) {
+    console.warn(
+      "Allowing all origins. Restrict CORS_ALLOW_ORIGINS before deploying publicly."
+    );
+  }
+
+  if (DISABLE_PERSISTENCE) {
+    console.warn(
+      "Document persistence is disabled. Room state will be lost on restart."
+    );
+  }
+}
+
+assertRuntimeConfig();
+logRuntimeWarnings();
 
 if (!DISABLE_PERSISTENCE) {
   mkdirSync(PERSISTENCE_DIR, { recursive: true });
@@ -84,6 +188,9 @@ function getDocStats() {
     authorizedRooms: roomStore.size,
     connections,
     persistence: !DISABLE_PERSISTENCE,
+    nodeEnv: NODE_ENV,
+    shuttingDown: isShuttingDown,
+    uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
   };
 }
 
@@ -167,6 +274,31 @@ function loadPersistedDoc(docName, doc) {
 function parseDocName(requestUrl = "/") {
   const url = new URL(requestUrl, "http://localhost");
   return decodeURIComponent(url.pathname.slice(1)) || "default";
+}
+
+function getRequestOrigin(request) {
+  const header = request?.headers?.origin;
+  return typeof header === "string" && header.length > 0 ? header : null;
+}
+
+function isOriginAllowed(origin) {
+  if (!origin) {
+    return true;
+  }
+
+  return ALLOWED_ORIGINS.has("*") || ALLOWED_ORIGINS.has(origin);
+}
+
+function getResponseOrigin(origin) {
+  if (ALLOWED_ORIGINS.has("*")) {
+    return "*";
+  }
+
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    return origin;
+  }
+
+  return null;
 }
 
 function normalizeRoomId(rawRoomId) {
@@ -664,29 +796,63 @@ function setupWSConnection(connection, request) {
   }
 }
 
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": CORS_ALLOW_ORIGIN,
+function corsHeaders(origin = null) {
+  const allowOrigin = getResponseOrigin(origin);
+  const headers = {
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     Vary: "Origin",
   };
+
+  if (allowOrigin) {
+    headers["Access-Control-Allow-Origin"] = allowOrigin;
+  }
+
+  return headers;
 }
 
-function sendJson(response, statusCode, payload) {
+function sendJson(response, statusCode, payload, request = null) {
   response.writeHead(statusCode, {
-    ...corsHeaders(),
+    ...corsHeaders(getRequestOrigin(request)),
     "Content-Type": "application/json",
   });
   response.end(JSON.stringify(payload));
 }
 
-function sendNotFound(response) {
-  sendJson(response, 404, { error: "Not found." });
+function sendNotFound(response, request = null) {
+  sendJson(response, 404, { error: "Not found." }, request);
 }
 
-function sendUnauthorized(response, error) {
-  sendJson(response, 401, { error: error.message || "Unauthorized." });
+function sendUnauthorized(response, error, request = null) {
+  sendJson(
+    response,
+    401,
+    { error: error.message || "Unauthorized." },
+    request
+  );
+}
+
+function sendForbidden(response, error, request = null) {
+  sendJson(
+    response,
+    403,
+    { error: error.message || "Forbidden." },
+    request
+  );
+}
+
+function sendServiceUnavailable(response, request = null) {
+  sendJson(response, 503, { error: "Server is shutting down." }, request);
+}
+
+function ensureAllowedOrigin(request, response) {
+  const origin = getRequestOrigin(request);
+  if (!origin || isOriginAllowed(origin)) {
+    return true;
+  }
+
+  sendForbidden(response, new Error("Origin is not allowed."), request);
+  return false;
 }
 
 async function authenticateRequest(request) {
@@ -699,13 +865,18 @@ async function handleCreateRoom(request, response) {
     const room = createRoomForUser(user);
     const grant = buildRoomGrant(room, room.members[user.sub]);
 
-    sendJson(response, 201, {
-      ...grant,
-      createdAt: room.createdAt,
-      ownerSub: room.ownerSub,
-    });
+    sendJson(
+      response,
+      201,
+      {
+        ...grant,
+        createdAt: room.createdAt,
+        ownerSub: room.ownerSub,
+      },
+      request
+    );
   } catch (error) {
-    sendUnauthorized(response, error);
+    sendUnauthorized(response, error, request);
   }
 }
 
@@ -715,13 +886,13 @@ async function handleJoinRoom(request, response, rawRoomId) {
   try {
     roomId = normalizeRoomId(rawRoomId);
   } catch (error) {
-    sendJson(response, 400, { error: error.message });
+    sendJson(response, 400, { error: error.message }, request);
     return;
   }
 
   const room = getRoom(roomId);
   if (!room) {
-    sendJson(response, 404, { error: "Room not found or expired." });
+    sendJson(response, 404, { error: "Room not found or expired." }, request);
     return;
   }
 
@@ -730,13 +901,18 @@ async function handleJoinRoom(request, response, rawRoomId) {
     const member = ensureRoomMember(room, user, "participant");
     const grant = buildRoomGrant(room, member);
 
-    sendJson(response, 200, {
-      ...grant,
-      createdAt: room.createdAt,
-      ownerSub: room.ownerSub,
-    });
+    sendJson(
+      response,
+      200,
+      {
+        ...grant,
+        createdAt: room.createdAt,
+        ownerSub: room.ownerSub,
+      },
+      request
+    );
   } catch (error) {
-    sendUnauthorized(response, error);
+    sendUnauthorized(response, error, request);
   }
 }
 
@@ -753,9 +929,16 @@ async function flushAllDocs() {
 }
 
 function rejectUpgrade(socket, statusCode, message) {
+  const statusText = {
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    503: "Service Unavailable",
+  }[statusCode] || "Bad Request";
+
   socket.write(
     [
-      `HTTP/1.1 ${statusCode} ${statusCode === 401 ? "Unauthorized" : "Bad Request"}`,
+      `HTTP/1.1 ${statusCode} ${statusText}`,
       "Connection: close",
       "Content-Type: application/json",
       `Content-Length: ${Buffer.byteLength(message)}`,
@@ -767,6 +950,23 @@ function rejectUpgrade(socket, statusCode, message) {
 }
 
 function authorizeUpgrade(request) {
+  if (isShuttingDown) {
+    return {
+      ok: false,
+      statusCode: 503,
+      message: JSON.stringify({ error: "Server is shutting down." }),
+    };
+  }
+
+  const origin = getRequestOrigin(request);
+  if (origin && !isOriginAllowed(origin)) {
+    return {
+      ok: false,
+      statusCode: 403,
+      message: JSON.stringify({ error: "Origin is not allowed." }),
+    };
+  }
+
   const url = new URL(
     request.url || "/",
     `http://${request.headers.host || "localhost"}`
@@ -822,6 +1022,18 @@ function authorizeUpgrade(request) {
   }
 }
 
+const roomSweepInterval = setInterval(() => {
+  try {
+    pruneExpiredRooms();
+  } catch (error) {
+    console.error("Failed to prune expired rooms", error);
+  }
+}, ROOM_SWEEP_INTERVAL_MS);
+
+if (typeof roomSweepInterval.unref === "function") {
+  roomSweepInterval.unref();
+}
+
 const server = http.createServer((request, response) => {
   void (async () => {
     const url = new URL(
@@ -829,19 +1041,48 @@ const server = http.createServer((request, response) => {
       `http://${request.headers.host || "localhost"}`
     );
 
+    if (!ensureAllowedOrigin(request, response)) {
+      return;
+    }
+
     if (request.method === "OPTIONS") {
-      response.writeHead(204, corsHeaders());
+      response.writeHead(204, corsHeaders(getRequestOrigin(request)));
       response.end();
       return;
     }
 
-    if (url.pathname === "/" || url.pathname === "/healthz" || url.pathname === "/readyz") {
-      sendJson(response, 200, {
-        status: "ok",
-        host: HOST,
-        port: PORT,
-        ...getDocStats(),
-      });
+    if (url.pathname === "/" || url.pathname === "/healthz") {
+      sendJson(
+        response,
+        200,
+        {
+          status: "ok",
+          host: HOST,
+          port: PORT,
+          ...getDocStats(),
+        },
+        request
+      );
+      return;
+    }
+
+    if (url.pathname === "/readyz") {
+      sendJson(
+        response,
+        isShuttingDown ? 503 : 200,
+        {
+          status: isShuttingDown ? "draining" : "ready",
+          host: HOST,
+          port: PORT,
+          ...getDocStats(),
+        },
+        request
+      );
+      return;
+    }
+
+    if (isShuttingDown) {
+      sendServiceUnavailable(response, request);
       return;
     }
 
@@ -856,10 +1097,10 @@ const server = http.createServer((request, response) => {
       return;
     }
 
-    sendNotFound(response);
+    sendNotFound(response, request);
   })().catch((error) => {
     console.error("Unhandled collab-server request error", error);
-    sendJson(response, 500, { error: "Internal server error." });
+    sendJson(response, 500, { error: "Internal server error." }, request);
   });
 });
 
@@ -868,6 +1109,102 @@ const wss = new WebSocketServer({
   maxPayload: MAX_PAYLOAD_BYTES,
   perMessageDeflate: false,
 });
+
+async function closeWebSocketClients() {
+  await Promise.all(
+    Array.from(wss.clients).map(
+      (connection) =>
+        new Promise((resolve) => {
+          if (
+            connection.readyState !== connection.OPEN &&
+            connection.readyState !== connection.CONNECTING
+          ) {
+            resolve();
+            return;
+          }
+
+          const timeout = setTimeout(resolve, 1000);
+          if (typeof timeout.unref === "function") {
+            timeout.unref();
+          }
+
+          connection.once("close", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+
+          try {
+            connection.close(1012, "Server restarting");
+          } catch {
+            clearTimeout(timeout);
+            resolve();
+          }
+        })
+    )
+  );
+}
+
+async function shutdownServer(reason, exitCode = 0) {
+  if (shutdownPromise) {
+    return shutdownPromise;
+  }
+
+  isShuttingDown = true;
+  console.log(`Shutting down CodeDuel collab server (${reason})...`);
+
+  shutdownPromise = (async () => {
+    const forceExitTimer = setTimeout(() => {
+      console.error(
+        `Forced collab-server shutdown after ${SHUTDOWN_GRACE_MS}ms.`
+      );
+      process.exit(exitCode === 0 ? 1 : exitCode);
+    }, SHUTDOWN_GRACE_MS);
+
+    if (typeof forceExitTimer.unref === "function") {
+      forceExitTimer.unref();
+    }
+
+    try {
+      const shutdownResults = await Promise.allSettled([
+        new Promise((resolve, reject) => {
+          if (!server.listening) {
+            resolve();
+            return;
+          }
+
+          server.close((error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+
+            resolve();
+          });
+        }),
+        closeWebSocketClients(),
+        flushAllDocs(),
+        flushRoomsNow().catch((error) => {
+          console.error("Failed to flush room metadata during shutdown", error);
+        }),
+      ]);
+
+      shutdownResults.forEach((result) => {
+        if (result.status === "rejected") {
+          console.error("Collab-server shutdown task failed", result.reason);
+        }
+      });
+
+      clearTimeout(forceExitTimer);
+      process.exit(exitCode);
+    } catch (error) {
+      clearTimeout(forceExitTimer);
+      console.error("Failed to shut down collab-server cleanly", error);
+      process.exit(exitCode === 0 ? 1 : exitCode);
+    }
+  })();
+
+  return shutdownPromise;
+}
 
 server.on("upgrade", (request, socket, head) => {
   const url = new URL(
@@ -896,16 +1233,35 @@ server.on("upgrade", (request, socket, head) => {
   });
 });
 
+server.on("error", (error) => {
+  console.error("Collab-server listener error", error);
+  void shutdownServer("listener error", 1);
+});
+
 server.listen(PORT, HOST, () => {
   console.log(
     `CodeDuel collab server listening on http://${HOST}:${PORT} ` +
-      `(persistence ${DISABLE_PERSISTENCE ? "disabled" : `at ${PERSISTENCE_DIR}`})`
+      `(persistence ${DISABLE_PERSISTENCE ? "disabled" : `at ${PERSISTENCE_DIR}`}, ` +
+      `origins ${
+        ALLOWED_ORIGINS.has("*")
+          ? "*"
+          : Array.from(ALLOWED_ORIGINS).join(", ") || "none"
+      })`
   );
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, async () => {
-    await Promise.all([flushAllDocs(), flushRoomsNow().catch(() => {})]);
-    process.exit(0);
+  process.on(signal, () => {
+    void shutdownServer(signal, 0);
   });
 }
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection in collab-server", reason);
+  void shutdownServer("unhandled rejection", 1);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception in collab-server", error);
+  void shutdownServer("uncaught exception", 1);
+});
