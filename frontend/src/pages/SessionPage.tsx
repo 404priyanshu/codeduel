@@ -4,6 +4,8 @@ import {
   AlertCircle,
   Code2,
   Loader2,
+  UserRound,
+  Users,
   Wifi,
   WifiOff,
 } from "lucide-react";
@@ -27,12 +29,18 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
+  getPresenceColor,
+  getPresenceName,
+  type PresenceParticipant,
+} from "@/lib/presence";
+import {
   joinRoom,
   normalizeRoomId,
   persistRoomGrant,
   readRoomGrant,
   type RoomGrant,
 } from "@/lib/rooms";
+import { useAuth } from "@/lib/useAuth";
 
 const LANGUAGES = [
   { label: "JavaScript", value: "javascript" },
@@ -50,8 +58,10 @@ export default function SessionPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [language, setLanguage] = useState("javascript");
   const [connected, setConnected] = useState(false);
+  const [participants, setParticipants] = useState<PresenceParticipant[]>([]);
   const [roomGrant, setRoomGrant] = useState<RoomGrant | null>(null);
   const [authorizing, setAuthorizing] = useState(false);
   const [authorizationError, setAuthorizationError] = useState("");
@@ -87,6 +97,23 @@ export default function SessionPage() {
     roomGrant?.roomId === normalizedRoomId
       ? roomGrant
       : locationRoomGrant ?? cachedRoomGrant;
+  const currentPresenceUser = useMemo(() => {
+    if (!user || !activeRoomGrant) {
+      return null;
+    }
+
+    const displayName = getPresenceName(
+      user.signInDetails?.loginId,
+      user.username
+    );
+
+    return {
+      userId: user.userId,
+      name: displayName,
+      role: activeRoomGrant.role,
+      color: getPresenceColor(user.userId),
+    } as const;
+  }, [activeRoomGrant, user]);
   const isAuthorizing =
     !activeRoomGrant &&
     !authorizationError &&
@@ -148,6 +175,10 @@ export default function SessionPage() {
     );
   }, []);
 
+  const handlePresenceChange = useCallback((nextParticipants: PresenceParticipant[]) => {
+    setParticipants(nextParticipants);
+  }, []);
+
   if (!normalizedRoomId) {
     return null;
   }
@@ -178,6 +209,36 @@ export default function SessionPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <div className="hidden max-w-[28rem] items-center gap-2 xl:flex">
+              {participants.length > 0 ? (
+                participants.map((participant) => (
+                  <div
+                    key={participant.userId}
+                    className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/70 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground"
+                  >
+                    <span
+                      className="size-2.5 rounded-full"
+                      style={{ backgroundColor: participant.color }}
+                    />
+                    <span className="max-w-[10rem] truncate text-foreground/90">
+                      {participant.name}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/80">
+                      {participant.role}
+                    </span>
+                    {participant.isSelf ? (
+                      <span className="text-primary">you</span>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/70 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  <UserRound className="size-3.5" />
+                  Waiting for participants
+                </div>
+              )}
+            </div>
+
             <div className="w-40">
               <Select
                 value={language}
@@ -213,6 +274,10 @@ export default function SessionPage() {
                 <WifiOff className="size-3.5" />
               )}
               {isAuthorizing ? "Authorizing" : connected ? "Live" : "Connecting"}
+            </Badge>
+            <Badge className="font-mono" variant="outline">
+              <Users className="size-3.5" />
+              {participants.length || (activeRoomGrant ? 1 : 0)}
             </Badge>
           </div>
         </div>
@@ -282,23 +347,32 @@ export default function SessionPage() {
           </div>
         ) : activeRoomGrant ? (
           <Editor
+            currentUser={currentPresenceUser}
             sessionId={normalizedRoomId}
             roomAccessToken={activeRoomGrant.roomAccessToken}
             language={language}
             onConnectionChange={handleConnectionChange}
             onLanguageChange={handleLanguageChange}
+            onPresenceChange={handlePresenceChange}
           />
         ) : null}
       </div>
 
       <footer className="border-t border-border/70 bg-card/55 px-4 py-2 md:px-6">
-        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-          {isAuthorizing
-            ? "Waiting for server-backed room authorization."
-            : connected
-              ? "Connected. Editor and language changes sync in real time."
-              : "Room authorized. Connecting to collaboration server."}
-        </span>
+        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            {isAuthorizing
+              ? "Waiting for server-backed room authorization."
+              : connected
+                ? "Connected. Editor, language, and presence sync in real time."
+                : "Room authorized. Connecting to collaboration server."}
+          </span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            {participants.length > 0
+              ? `${participants.length} participant${participants.length === 1 ? "" : "s"} in room`
+              : "No presence detected yet"}
+          </span>
+        </div>
       </footer>
     </div>
   );

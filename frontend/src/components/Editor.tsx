@@ -4,21 +4,26 @@ import type * as monacoType from "monaco-editor";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { MonacoBinding } from "y-monaco";
+import type { EditorPresenceUser, PresenceParticipant } from "@/lib/presence";
 
 interface Props {
     sessionId: string;
     roomAccessToken: string;
+    currentUser?: EditorPresenceUser | null;
     language?: string;
     onConnectionChange?: (connected: boolean) => void;
     onLanguageChange?: (language: string) => void;
+    onPresenceChange?: (participants: PresenceParticipant[]) => void;
 }
 
 export default function Editor({
     sessionId,
     roomAccessToken,
+    currentUser,
     language = "javascript",
     onConnectionChange,
     onLanguageChange,
+    onPresenceChange,
 }: Props) {
     const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(null);
     const monacoRef = useRef<typeof monacoType | null>(null);
@@ -30,12 +35,16 @@ export default function Editor({
     const syncedRef = useRef(false);
     const languageRef = useRef(language);
     const onLanguageChangeRef = useRef(onLanguageChange);
+    const onPresenceChangeRef = useRef(onPresenceChange);
+    const currentUserRef = useRef(currentUser);
     const [isEditorReady, setIsEditorReady] = useState(false);
 
     useEffect(() => {
         languageRef.current = language;
         onLanguageChangeRef.current = onLanguageChange;
-    }, [language, onLanguageChange]);
+        onPresenceChangeRef.current = onPresenceChange;
+        currentUserRef.current = currentUser;
+    }, [currentUser, language, onLanguageChange, onPresenceChange]);
 
     const handleMount: OnMount = (editor, monaco) => {
         editorRef.current = editor;
@@ -62,12 +71,65 @@ export default function Editor({
             },
             resyncInterval: 5000,
         });
-        const binding = new MonacoBinding(yText, model, new Set([editor]));
+        const styleElement = document.createElement("style");
+        styleElement.setAttribute("data-codeduel-presence", sessionId);
+        document.head.appendChild(styleElement);
+        const binding = new MonacoBinding(
+            yText,
+            model,
+            new Set([editor]),
+            provider.awareness
+        );
 
         let socketConnected = false;
         let docSynced = false;
         const emitConnectionState = () => {
             onConnectionChange?.(socketConnected && docSynced);
+        };
+        const emitPresenceState = () => {
+            const aggregatedParticipants = new Map<string, PresenceParticipant>();
+            const styleRules = [
+                ".monaco-editor .yRemoteSelection { border-radius: 3px; }",
+                ".monaco-editor .yRemoteSelectionHead::after, .monaco-editor .yRemoteSelectionHead::before { content: ''; position: absolute; top: 0; bottom: 0; width: 2px; }",
+            ];
+
+            provider.awareness.getStates().forEach((state, clientId) => {
+                const user = state.user as EditorPresenceUser | undefined;
+                if (!user || typeof user.userId !== "string" || typeof user.name !== "string") {
+                    return;
+                }
+
+                styleRules.push(
+                    `.monaco-editor .yRemoteSelection-${clientId} { background-color: ${user.color}2e; border-left: 2px solid ${user.color}; }`,
+                    `.monaco-editor .yRemoteSelectionHead-${clientId}::after, .monaco-editor .yRemoteSelectionHead-${clientId}::before { border-left: 2px solid ${user.color}; margin-left: -1px; }`
+                );
+
+                const participantKey = user.userId;
+                const existingParticipant = aggregatedParticipants.get(participantKey);
+
+                if (existingParticipant) {
+                    existingParticipant.clientIds.push(clientId);
+                    return;
+                }
+
+                aggregatedParticipants.set(participantKey, {
+                    ...user,
+                    clientIds: [clientId],
+                    isSelf: participantKey === currentUserRef.current?.userId,
+                });
+            });
+
+            styleElement.textContent = styleRules.join("\n");
+            onPresenceChangeRef.current?.(
+                Array.from(aggregatedParticipants.values()).sort((left, right) => {
+                    if (left.isSelf && !right.isSelf) return -1;
+                    if (!left.isSelf && right.isSelf) return 1;
+                    if (left.role !== right.role) {
+                        return left.role === "owner" ? -1 : 1;
+                    }
+                    return left.name.localeCompare(right.name);
+                })
+            );
         };
 
         const statusListener = ({
@@ -81,6 +143,9 @@ export default function Editor({
             }
             emitConnectionState();
         };
+        const awarenessListener = () => {
+            emitPresenceState();
+        };
         const syncListener = (synced: boolean) => {
             docSynced = synced;
             syncedRef.current = synced;
@@ -93,6 +158,7 @@ export default function Editor({
                 } else {
                     sessionState.set("language", languageRef.current);
                 }
+                emitPresenceState();
             }
             emitConnectionState();
         };
@@ -117,7 +183,12 @@ export default function Editor({
         provider.on("sync", syncListener);
         provider.on("connection-error", disconnectListener);
         provider.on("connection-close", disconnectListener);
+        provider.awareness.on("change", awarenessListener);
         sessionState.observe(sessionStateListener);
+        if (currentUserRef.current) {
+            provider.awareness.setLocalStateField("user", currentUserRef.current);
+        }
+        emitPresenceState();
 
         docRef.current = doc;
         providerRef.current = provider;
@@ -136,12 +207,17 @@ export default function Editor({
             dispose: () => provider.off("connection-close", disconnectListener),
         });
         editorDisposables.current.push({
+            dispose: () => provider.awareness.off("change", awarenessListener),
+        });
+        editorDisposables.current.push({
             dispose: () => sessionState.unobserve(sessionStateListener),
         });
 
         return () => {
             editorDisposables.current.forEach((d) => d.dispose());
             editorDisposables.current = [];
+            provider.awareness.setLocalState(null);
+            styleElement.remove();
             bindingRef.current?.destroy();
             providerRef.current?.destroy();
             docRef.current?.destroy();
@@ -150,8 +226,9 @@ export default function Editor({
             docRef.current = null;
             sessionStateRef.current = null;
             onConnectionChange?.(false);
+            onPresenceChangeRef.current?.([]);
         };
-    }, [isEditorReady, onConnectionChange, roomAccessToken, sessionId]);
+    }, [currentUser, isEditorReady, onConnectionChange, roomAccessToken, sessionId]);
 
     useEffect(() => {
         const editor = editorRef.current;
@@ -167,6 +244,12 @@ export default function Editor({
         if (sessionState.get("language") === language) return;
         sessionState.set("language", language);
     }, [language]);
+
+    useEffect(() => {
+        const provider = providerRef.current;
+        if (!provider || !currentUser) return;
+        provider.awareness.setLocalStateField("user", currentUser);
+    }, [currentUser]);
 
     return (
         <MonacoEditor
