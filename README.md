@@ -7,6 +7,7 @@ CodeDuel is a room-based collaborative coding app for technical interviews and p
 - Email sign up and sign in with Amazon Cognito
 - Optional Google sign-in through Cognito Hosted UI
 - Protected dashboard for creating or joining interview rooms
+- Server-backed room creation, join authorization, and signed room access tokens
 - Shared Monaco editor powered by Yjs CRDT sync
 - Synchronized language selection across connected editors
 - Dedicated collaboration server with reconnect handling, persistence, and health checks
@@ -17,12 +18,11 @@ CodeDuel is a room-based collaborative coding app for technical interviews and p
 codeduel/
 ├── frontend/        React + Vite application
 ├── collab-server/   Dedicated Yjs websocket server used by the live editor
-├── infrastructure/  AWS CDK stack for Cognito and supporting backend resources
+├── infrastructure/  AWS CDK stack for Cognito auth resources
 └── docs/            Project documentation and technical report
 ```
 
 The active real-time editor path is `frontend/` + `collab-server/`.
-The AWS WebSocket handlers inside `infrastructure/` are still in the repo, but they are not the current live editor transport.
 
 ## Quick start
 
@@ -76,6 +76,16 @@ VITE_AUTH_REDIRECT_SIGN_IN=http://localhost:5173/login
 VITE_AUTH_REDIRECT_SIGN_OUT=http://localhost:5173/
 ```
 
+If you use custom Cognito values, give the same pool/client to the collaboration server so it can verify room API requests and websocket access:
+
+```bash
+cd collab-server
+COGNITO_USER_POOL_ID=your-user-pool-id \
+COGNITO_USER_POOL_CLIENT_ID=your-user-pool-client-id \
+ROOM_TOKEN_SECRET=replace-this-in-production \
+npm start
+```
+
 To provision Google sign-in in the CDK stack, export these before `cd infrastructure && npx cdk deploy`:
 
 ```bash
@@ -88,7 +98,7 @@ export AUTH_LOGOUT_URLS=http://localhost:5173/
 
 ## Technical documentation
 
-For a detailed explanation of how the project works internally, including the frontend, Yjs collaboration flow, Cognito auth, AWS CDK resources, legacy pieces still in the repo, and dependency rationale, see:
+For a detailed explanation of how the project works internally, including the frontend, Yjs collaboration flow, room authorization model, Cognito auth, AWS CDK resources, and dependency rationale, see:
 
 - `docs/TECHNICAL_REPORT.md`
 

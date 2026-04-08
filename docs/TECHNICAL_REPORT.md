@@ -9,16 +9,9 @@ Date of reference: April 8, 2026
 CodeDuel is currently an authenticated collaborative coding application built around a shared Monaco editor. Two users can enter the same room and edit the same document in real time. The app uses:
 
 - A React frontend for routing, auth-aware pages, and the editor UI
-- A dedicated Yjs websocket server for low-latency collaborative editing
+- A dedicated Yjs websocket server for low-latency collaborative editing and room authorization
 - Amazon Cognito for user accounts and authentication
-- AWS CDK infrastructure for Cognito and a legacy websocket backend prototype
-
-The most important architecture decision in the current version is this:
-
-- The live collaborative editor does not use the AWS API Gateway websocket path today
-- The live collaborative editor does use the standalone `collab-server/` Yjs websocket service
-
-That distinction matters because the repo still contains an older websocket implementation under `infrastructure/lambda/websocket/`, but that path is not the active editor backend anymore.
+- AWS CDK infrastructure for Cognito provisioning
 
 ## 2. Current product scope vs vision
 
@@ -62,7 +55,6 @@ codeduel/
 ├── infrastructure/
 │   ├── bin/
 │   ├── lib/
-│   ├── lambda/
 │   └── package.json
 └── docs/
     └── TECHNICAL_REPORT.md
@@ -74,7 +66,7 @@ codeduel/
 |---|---|---|
 | `frontend/` | Main user-facing web app | Active |
 | `collab-server/` | Real-time collaboration backend for the editor | Active |
-| `infrastructure/` | AWS CDK stack and websocket Lambda prototype | Partially active |
+| `infrastructure/` | AWS CDK stack for auth provisioning | Active |
 | `docs/` | Documentation | Active |
 
 ## 4. High-level architecture
@@ -83,20 +75,20 @@ codeduel/
 flowchart LR
     A["Browser client"] --> B["React app in frontend/"]
     B --> C["Amazon Cognito via Amplify"]
-    B --> D["Yjs websocket room on collab-server/"]
-    D --> E["Room snapshot files in collab-server/data/"]
-    F["AWS CDK in infrastructure/"] --> C
-    F --> G["DynamoDB table"]
-    F --> H["Legacy API Gateway websocket + Lambda handlers"]
+    B --> D["Room API on collab-server/"]
+    B --> E["Yjs websocket room on collab-server/"]
+    D --> F["Room metadata + signed access tokens"]
+    E --> G["Room snapshot files in collab-server/data/"]
+    H["AWS CDK in infrastructure/"] --> C
 ```
 
 ### Practical reading of this architecture
 
 - Cognito handles who the user is
 - The React app decides which pages require auth
+- The collab server authorizes room creation and join requests
 - The editor itself syncs over Yjs websockets
 - The Yjs server persists room state to disk
-- The AWS websocket stack remains in the repo, but the editor is no longer using it
 
 ## 5. Frontend architecture
 
@@ -209,33 +201,62 @@ Purpose:
 
 How room creation works:
 
-- A session ID is generated client-side with `Math.random().toString(36)`
-- It is uppercased and shortened to 8 characters
-- The user is navigated to `/session/<ID>`
+- The page calls the collab server room API
+- The server creates a room record and signed room access token
+- The user is navigated to `/session/<ROOM_ID>` with the granted access state
 
-Why this is simple:
+Why this matters:
 
-- It removes the need for a server roundtrip to create a room
-- It keeps the prototype fast and easy to use
-
-Tradeoff:
-
-- The room ID is a convenience identifier, not a signed or server-issued authorization token
+- Room membership is now verified at the server boundary
+- Browser clients no longer invent room IDs without server involvement
 
 #### `SessionPage.tsx`
 
 Purpose:
 
 - Displays the session header, language selector, connection state, and editor
+- Recovers or requests room authorization before mounting the editor
 
 State managed here:
 
 - `language`
 - `connected`
+- `roomGrant`
+- `authorizing`
+- `authorizationError`
 
 This page does not directly own collaboration logic. Instead, it passes room ID, selected language, and callbacks into `Editor.tsx`.
 
-### 5.4 Collaborative editor subsystem
+### 5.4 Room access subsystem
+
+Key file:
+
+- `frontend/src/lib/rooms.ts`
+
+This module is the frontend bridge to the collaboration server room API.
+
+It is responsible for:
+
+- requesting signed-in Cognito tokens from Amplify
+- creating a room through `POST /api/rooms`
+- joining an existing room through `POST /api/rooms/:id/join`
+- caching room grants in `sessionStorage`
+- restoring room authorization after a refresh while the room grant is still valid
+
+The room grant includes:
+
+- `roomId`
+- `roomAccessToken`
+- `role`
+- expiration metadata
+
+Why this exists:
+
+- it keeps room authorization server-backed
+- it lets the editor websocket connect with a short-lived signed room token
+- it avoids pushing Cognito verification logic down into the editor component itself
+
+### 5.5 Collaborative editor subsystem
 
 Key file:
 
@@ -263,6 +284,12 @@ Currently, the `session` map is used for:
 
 That is why code edits and language selection are both synced between users.
 
+The editor also receives:
+
+- `roomAccessToken`
+
+That token is sent as a websocket query parameter through the Yjs provider so the collaboration server can authorize the connection before the room sync begins.
+
 #### Important behavior in the implementation
 
 1. The Yjs provider is created only after Monaco is fully mounted
@@ -279,6 +306,7 @@ These choices solve several previous collaboration issues:
 - stale "connected" indicators before actual sync
 - language dropdown changes being local-only
 - more frequent sync drift during reconnects
+- unauthorized websocket access bypassing the app room flow
 
 #### Reliability controls configured in the editor
 
@@ -293,32 +321,6 @@ The Monaco instance also uses:
 
 That improves resilience during reconnects and keeps layout behavior smoother.
 
-### 5.5 Legacy frontend collaboration hook
-
-Key file:
-
-- `frontend/src/lib/useSession.ts`
-
-This hook is a legacy collaboration implementation that predates the Yjs approach.
-
-What it does:
-
-- Opens a plain websocket
-- Sends whole code payloads
-- Tracks `remoteCode`
-- Debounces outbound sends
-
-Why it is no longer the active path:
-
-- Whole-document broadcasting is more fragile than CRDT syncing
-- It is more prone to race conditions and overwrite behavior
-- Yjs gives better convergence and conflict handling for collaborative text editing
-
-Recommendation:
-
-- Keep it only if you want a reference during migration
-- Otherwise, removing it would reduce confusion
-
 ## 6. Collaboration backend architecture
 
 The collaboration backend is the dedicated Yjs server in `collab-server/server.js`.
@@ -331,6 +333,7 @@ The current app originally had websocket-oriented infrastructure under AWS, but 
 - less custom merge logic
 - better reconnect behavior
 - simpler real-time document semantics
+- server-backed room authorization
 
 Yjs already solves shared text convergence well. Building around its native websocket protocol is much more stable than shipping full-text payloads between clients.
 
@@ -338,7 +341,11 @@ Yjs already solves shared text convergence well. Building around its native webs
 
 The server:
 
+- verifies Cognito-backed room API requests
+- creates and joins rooms through HTTP endpoints
+- issues signed room access tokens
 - accepts websocket room connections
+- authorizes websocket upgrades against room grants
 - loads or creates a Yjs document for that room
 - seeds starter text for brand-new rooms
 - relays Yjs sync protocol messages
@@ -363,7 +370,31 @@ This design gives two interfaces on the same port:
 - HTTP for `/healthz` and `/readyz`
 - WebSocket upgrades for room connections
 
-### 6.3 Room model
+### 6.3 Room authorization model
+
+The server keeps lightweight room metadata alongside the Yjs documents.
+
+Each room includes:
+
+- `roomId`
+- `ownerSub`
+- `createdAt`
+- `updatedAt`
+- `expiresAt`
+- member records keyed by Cognito `sub`
+
+The room API flow is:
+
+1. authenticated user calls `POST /api/rooms`
+2. server creates a room and owner membership record
+3. server signs a short-lived room access token
+4. frontend stores the room grant
+5. websocket connection includes `roomAccessToken`
+6. server verifies the signed room token before allowing sync
+
+This gives the editor a server-backed authorization layer without requiring the websocket protocol itself to perform Cognito JWT verification on every frame.
+
+### 6.4 Room model
 
 Each room name is derived from the request path:
 
@@ -377,7 +408,7 @@ Each `WSSharedDoc` holds:
 - an awareness instance
 - the set of open client connections
 
-### 6.4 Document contents
+### 6.5 Document contents
 
 The collaboration document includes:
 
@@ -392,7 +423,7 @@ When a brand-new room is created, the server inserts starter text:
 
 This is controlled by `CODEDUEL_EDITOR_TEMPLATE`.
 
-### 6.5 Persistence model
+### 6.6 Persistence model
 
 The server persists rooms as Yjs binary updates in `collab-server/data/`.
 
@@ -408,13 +439,16 @@ Why this design works:
 - Avoids writing on every keystroke
 - Prevents partially written snapshots
 - Keeps room persistence simple without introducing a database yet
+- Keeps room metadata and room documents colocated in the same service
 
 Tradeoff:
 
 - Persistence is local to one server instance
 - Horizontal scaling needs sticky sessions or shared storage/pub-sub
 
-### 6.6 Health and operational features
+The server also persists room metadata in a JSON file under the same data directory so room membership survives restarts on a single instance.
+
+### 6.7 Health and operational features
 
 The server exposes:
 
@@ -435,7 +469,7 @@ This is useful for:
 - container health probes
 - quick checks during incident diagnosis
 
-### 6.7 Connection lifecycle controls
+### 6.8 Connection lifecycle controls
 
 The server includes:
 
@@ -450,12 +484,15 @@ Why these matter:
 - payload limits reduce risk from unexpectedly large frames
 - no per-message deflate lowers CPU overhead and removes one source of latency variability
 
-### 6.8 Collaboration server environment variables
+### 6.9 Collaboration server environment variables
 
 | Variable | Purpose | Default |
 |---|---|---|
 | `HOST` | Bind address | `0.0.0.0` |
 | `PORT` | Server port | `1234` |
+| `COGNITO_USER_POOL_ID` | User pool used to verify room API tokens | built-in local default |
+| `COGNITO_USER_POOL_CLIENT_ID` | User pool client used to verify room API tokens | built-in local default |
+| `ROOM_TOKEN_SECRET` | HMAC secret for signed room access tokens | dev fallback |
 | `DISABLE_PERSISTENCE` | Skip disk snapshots | off |
 | `YDOCS_DIR` | Snapshot directory | `./data` |
 | `PERSISTENCE_FLUSH_DEBOUNCE_MS` | Debounced save interval | `750` |
@@ -475,15 +512,7 @@ The AWS side is actively relevant for:
 - Cognito user authentication
 - optional Google identity provider setup
 
-### 7.2 What is present but not currently used by the editor
-
-- DynamoDB-backed websocket connection tracking
-- API Gateway websocket routing
-- Lambda functions for connect, disconnect, and message fan-out
-
-These are important historically, but they are not the live editor transport in the current app.
-
-### 7.3 `InfrastructureStack`
+### 7.2 `InfrastructureStack`
 
 Key file:
 
@@ -494,11 +523,8 @@ This stack creates:
 - a Cognito user pool
 - a Cognito app client
 - an optional Google identity provider and Cognito Hosted UI domain
-- a DynamoDB table
-- three Lambda functions for websocket connection lifecycle
-- an API Gateway websocket API and stage
 
-### 7.4 Cognito configuration
+### 7.3 Cognito configuration
 
 The stack enables:
 
@@ -513,7 +539,7 @@ Why Cognito was chosen:
 - provides hosted OAuth compatibility
 - integrates cleanly with Amplify on the frontend
 
-### 7.5 Optional Google sign-in
+### 7.4 Optional Google sign-in
 
 Google auth is enabled only if all three are provided:
 
@@ -534,33 +560,13 @@ When enabled, the stack:
 - configures the user pool client for authorization code grant
 - requests `openid`, `email`, and `profile` scopes
 
-### 7.6 DynamoDB and legacy websocket backend
-
-The stack creates a table named `codeduel-sessions` with:
-
-- partition key `pk`
-- sort key `sk`
-- TTL attribute `ttl`
-- pay-per-request billing
-
-The legacy websocket Lambda handlers use this table to:
-
-- track active websocket connections per session
-- broadcast code payloads to peers
-- remove stale connections
-
-This design made sense before the move to Yjs, but it is a less capable fit for collaborative text editing because it relies on broadcasting document payloads instead of CRDT updates.
-
-### 7.7 Infrastructure outputs
+### 7.5 Infrastructure outputs
 
 The stack outputs:
 
 - `UserPoolId`
 - `UserPoolClientId`
 - `CognitoDomain` when Google is enabled
-- `WebSocketUrl`
-
-The websocket output is currently more useful as a legacy/prototype artifact than as the active editor endpoint.
 
 ## 8. End-to-end runtime flows
 
@@ -584,10 +590,11 @@ The websocket output is currently more useful as a legacy/prototype artifact tha
 ### 8.3 Session creation flow
 
 1. User opens dashboard
-2. Dashboard creates an 8-character room code locally
-3. App navigates to `/session/:id`
-4. `SessionPage.tsx` renders `Editor.tsx`
-5. `Editor.tsx` connects to `ws://<collab-server>/<sessionId>`
+2. Dashboard requests room creation from the collab server
+3. Collab server verifies Cognito identity, creates room metadata, and signs a room token
+4. App navigates to `/session/:id` with a room grant
+5. `SessionPage.tsx` restores or refreshes room authorization
+6. `Editor.tsx` connects to `ws://<collab-server>/<sessionId>?roomAccessToken=...`
 
 ### 8.4 Collaborative editing flow
 
@@ -661,15 +668,13 @@ This likely reflects planned expansion of the app rather than a mistake, but it 
 | `yjs` | `collab-server/server.js` | Shared CRDT document state |
 | `y-protocols` | `collab-server/server.js` | Yjs sync and awareness protocol encoding |
 | `lib0` | `collab-server/server.js` | Binary encoding/decoding helpers used by Yjs protocol |
+| `jose` | `collab-server/cognito.js` | Cognito JWT verification against JWKS |
 
 ### 9.4 Infrastructure dependencies
 
 | Package | Where used | Why it exists |
 |---|---|---|
 | `aws-cdk-lib`, `constructs` | CDK stack | Infrastructure definition |
-| `@aws-cdk/aws-apigatewayv2-alpha`, `@aws-cdk/aws-apigatewayv2-integrations-alpha` | CDK stack | WebSocket API resources |
-| `@aws-sdk/client-dynamodb` | websocket Lambdas | Connection storage queries |
-| `@aws-sdk/client-apigatewaymanagementapi` | websocket Lambdas | Sending websocket messages via API Gateway |
 
 ## 10. State and data model
 
@@ -701,9 +706,13 @@ Room persistence currently lives as local Yjs snapshot files on disk:
 
 User identity and tokens are managed by Cognito and Amplify rather than manually stored in app code.
 
-### Legacy websocket session state
+### Room authorization state
 
-The old websocket stack stores session connection metadata in DynamoDB for fan-out, but that is not the active collaboration path now.
+Room access is represented by:
+
+- server-side room membership metadata in `collab-server`
+- signed room access tokens issued by the room API
+- short-lived room grants cached in browser `sessionStorage`
 
 ## 11. Operational notes
 
@@ -740,23 +749,18 @@ Implication:
 
 - multiple app instances will need sticky sessions or a shared backend strategy
 
-### 12.2 Websocket room access is not separately authorized
+### 12.2 Room authorization is single-service and local-state based
 
-Frontend routes are protected, but the websocket room connection itself uses a room name and URL path without an auth token exchange.
-
-Implication:
-
-- the browser app enforces who can reach the session page
-- the collaboration server itself does not independently verify Cognito identity
-
-### 12.3 Room IDs are convenience identifiers, not strong access control
-
-Session IDs are generated on the client and used as room names.
+The collaboration server now verifies room API requests with Cognito tokens and signs room access grants, but the room metadata still lives on that same server instance.
 
 Implication:
 
-- this is fine for a prototype or internal tool
-- production hardening should use server-issued session records and room authorization
+- horizontal scaling will still need shared room metadata or sticky routing
+- room membership is not yet backed by a separate central app database
+
+### 12.3 Room lifecycle is still lightweight
+
+Rooms are now server-backed, but they are still lightweight collaboration records rather than a richer interview-session domain model.
 
 ### 12.4 Presence is supported at protocol level but not exposed in UI
 
@@ -766,17 +770,13 @@ The collaboration server handles Yjs awareness traffic, but the frontend does no
 - user presence chips
 - typing indicators
 
-### 12.5 Old websocket implementation still exists in parallel
-
-This is useful as historical context, but it can confuse future contributors because there are now two collaboration approaches in the repository.
-
-### 12.6 Some dependencies are scaffolded but unused
+### 12.5 Some dependencies are scaffolded but unused
 
 React Query, Axios, and Zustand are installed but not active in the current runtime.
 
 This is not necessarily wrong, but it is worth documenting so the project reads clearly.
 
-### 12.7 Product messaging is ahead of implementation
+### 12.6 Product messaging is ahead of implementation
 
 The landing page and older README copy describe a larger interview platform vision than the currently wired runtime features.
 
@@ -786,12 +786,12 @@ This is common in early-stage products, but it is important to keep internal and
 
 If the goal is to keep growing CodeDuel in a clean direction, the next most valuable steps would be:
 
-1. Add authenticated room authorization at the collaboration server boundary
-2. Move room/session creation to a backend-issued record instead of client-generated IDs
-3. Decide whether to remove or archive the legacy websocket Lambda path
-4. Add presence UI if multi-user awareness is important
-5. Introduce a real session domain model if code execution, interview metadata, or analytics are added
-6. Add a deployment model for the collab server that supports scaling beyond one instance
+1. Add presence UI if multi-user awareness is important
+2. Move room metadata to shared storage if you want multi-instance deployment
+3. Introduce a real session domain model if code execution, interview metadata, or analytics are added
+4. Add a deployment model for the collab server that supports scaling beyond one instance
+5. Remove or activate currently unused frontend dependencies such as React Query, Axios, and Zustand
+6. Lazy-load heavy visual assets if initial load performance becomes a priority
 
 ## 14. Short conclusion
 
@@ -799,12 +799,11 @@ CodeDuel today is best understood as:
 
 - a polished authenticated React frontend
 - a working shared Monaco editor built on Yjs
-- a dedicated Node collaboration server with persistence
+- a dedicated Node collaboration server with persistence and room authorization
 - Cognito-based authentication with optional Google sign-in
-- an AWS infrastructure layer that currently supports auth directly and retains an older websocket design for future cleanup or comparison
+- an AWS infrastructure layer focused on authentication provisioning
 
 That makes the project technically coherent, but still in the stage where the documentation needs to distinguish clearly between:
 
 - what is already real and active
-- what is left in the repo from earlier iterations
 - what belongs to the broader product roadmap
