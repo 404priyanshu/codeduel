@@ -2,6 +2,26 @@
 
 CodeDuel is a room-based collaborative coding app for technical interviews and pair-programming. It gives authenticated users a shared Monaco editor, fast real-time sync, and simple session links so two people can work in the same editor at the same time.
 
+## Preview
+
+[Interface walkthrough](#interface-walkthrough) · [Run locally](#quick-start) · [Technical report](docs/TECHNICAL_REPORT.md)
+
+![CodeDuel landing page introducing collaborative coding rooms](docs/images/landing.png)
+
+*Actual local landing page. The editor shown here is a landing-page illustration, not a connected two-person session.*
+
+### Interface walkthrough
+
+![Local CodeDuel walkthrough: landing page, features, and sign-in entry](docs/images/interface-walkthrough.gif)
+
+This capture shows the public interface and sign-in entry. A Cognito account and a running collaboration server are required to demonstrate the authenticated shared editor. No verified public deployment is linked here.
+
+## Engineering choice: Yjs owns shared editor state
+
+The Monaco editor binds to a Yjs document so concurrent edits can merge, while shared language selection lives in the same document and participant presence uses awareness. A dedicated server authorizes room access and persists document snapshots. The tradeoff is operational: this build uses one server instance with local or mounted persistence; multiple instances need sticky routing or shared state and pub/sub.
+
+See the [editor binding](frontend/src/components/Editor.tsx) and [collaboration server](collab-server/server.js).
+
 ## What works today
 
 - Email sign up and sign in with Amazon Cognito
